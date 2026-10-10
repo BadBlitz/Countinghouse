@@ -1,0 +1,25 @@
+# main is the production branch and takes changes from develop only. A ruleset can require a pull
+# request but can't say where it comes from, so this check does, and the ruleset on main requires
+# it. A fork's branch that happens to be called develop doesn't count.
+name: PR source
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  from-develop:
+    name: Source is develop
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REPO" != "$BASE_REPO" ] || [ "$HEAD_REF" != "develop" ]; then
+            echo "::error::main only takes pull requests from this repository's develop branch. Open this one against develop instead."
+            exit 1
+          fi
