@@ -404,6 +404,9 @@ The installed app checks for a newer release on startup (`AppUpdateService`) and
 the background. The top bar offers "Restart to update"; if that's never clicked, `VelopackApp.Run`
 applies the update at next launch.
 
+- **Nothing reaches `develop` without a pull request, and `main` takes pull requests from
+  `develop` only.** A ruleset enforces the first; the second is the `PR source` workflow, which
+  the ruleset on `main` requires to pass.
 - **The pack id is `Countinghouse.Desktop`, never `Countinghouse`.** Velopack installs to
   `%LOCALAPPDATA%\<packId>` and deletes that directory on uninstall, and `%LOCALAPPDATA%\Countinghouse`
   is the data directory.
