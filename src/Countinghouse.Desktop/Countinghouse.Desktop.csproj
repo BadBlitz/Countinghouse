@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- A WPF shell hosting the Blazor components in a WebView2 — no web server, browser, or port.
+       The Razor SDK (rather than the plain one) compiles .razor files and builds the scoped-CSS
+       bundle; UseWPF adds the desktop bits on top. -->
+  <PropertyGroup>
+    <!-- The Windows SDK version in the TFM is load-bearing, not boilerplate. BlazorWebView renders
+         through WebView2CompositionControl, which calls into the WinRT projection in
+         Microsoft.Windows.SDK.NET.dll; a plain net10.0-windows TFM does not reference the SDK
+         projection, so the control throws FileNotFoundException for that assembly the moment the
+         window is measured. It fails at first paint rather than at build, which is why it survived
+         a clean build and a passing test run. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Countinghouse.Desktop</RootNamespace>
+    <AssemblyName>Countinghouse</AssemblyName>
+    <ApplicationIcon>wwwroot\favicon.ico</ApplicationIcon>
+    <!-- The release version. Merging to main publishes whatever this says, so bump it on develop
+         before the merge; an unbumped merge is skipped rather than overwriting a release. -->
+    <Version>0.4.0</Version>
+  </PropertyGroup>
+
+  <!-- The Razor SDK's implicit-using set is narrower than the Web SDK's, so these need to be
+       explicit here. -->
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Countinghouse.Domain\Countinghouse.Domain.csproj" />
+    <ProjectReference Include="..\Countinghouse.SimpleFin\Countinghouse.SimpleFin.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.101" />
+    <!-- Not pulled in automatically here the way a Web SDK project's framework reference would. -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <!-- Installer and self-update from GitHub Releases. Keep in step with vpk in dotnet-tools.json. -->
+    <PackageReference Include="Velopack" Version="1.2.158" />
+  </ItemGroup>
+
+  <!-- App.xaml as a Page rather than the ApplicationDefinition, so WPF generates no Main and
+       Program.Main is the only entry point: Velopack's install/update hooks have to run before
+       WPF starts, and a hook launch must exit without ever opening a window. -->
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+  </ItemGroup>
+
+  <!-- The WebView reads wwwroot and the scoped-CSS bundle from the output directory through a
+       virtual host, so both must exist there for real rather than only in obj. -->
+  <ItemGroup>
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The Razor SDK writes Countinghouse.styles.css into obj and expects a web host to serve it from
+       there. index.html asks for it at the site root, so it has to land in wwwroot beside the
+       other assets. Explicit targets rather than Content items: the file does not exist at
+       project-evaluation time on a clean build, and IntermediateOutputPath is not set until the
+       SDK targets import, so the path has to be built where it is used. -->
+  <Target Name="CopyScopedCssBundleToOutput" AfterTargets="Build">
+    <Copy SourceFiles="$(IntermediateOutputPath)scopedcss/bundle/$(AssemblyName).styles.css"
+          DestinationFolder="$(OutDir)wwwroot" SkipUnchangedFiles="true"
+          Condition="Exists('$(IntermediateOutputPath)scopedcss/bundle/$(AssemblyName).styles.css')" />
+  </Target>
+
+  <Target Name="CopyScopedCssBundleToPublish" AfterTargets="Publish">
+    <Copy SourceFiles="$(IntermediateOutputPath)scopedcss/bundle/$(AssemblyName).styles.css"
+          DestinationFolder="$(PublishDir)wwwroot" SkipUnchangedFiles="true"
+          Condition="Exists('$(IntermediateOutputPath)scopedcss/bundle/$(AssemblyName).styles.css')" />
+  </Target>
+
+</Project>

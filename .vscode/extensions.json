@@ -1,0 +1,8 @@
+{
+  // The "coreclr" launch configs in launch.json need the C# extension's debugger.
+  // C# Dev Kit adds the Solution Explorer and Test Explorer on top of it.
+  "recommendations": [
+    "ms-dotnettools.csharp",
+    "ms-dotnettools.csdevkit"
+  ]
+}

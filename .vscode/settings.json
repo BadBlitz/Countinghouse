@@ -1,0 +1,5 @@
+{
+  // Skip C# Dev Kit's "which solution?" prompt on open, so the debugger and Test
+  // Explorer resolve the projects without being pointed at them first.
+  "dotnet.defaultSolution": "Countinghouse.sln"
+}

@@ -1,0 +1,441 @@
+@page "/settings/simplefin"
+@inject SimpleFinConnectionService Connections
+@inject SimpleFinSyncService Sync
+@inject AccountService AccountService
+
+<PageTitle>SimpleFIN - Countinghouse</PageTitle>
+
+<h1>SimpleFIN</h1>
+<p>
+    Links this app to the institutions you connected at
+    <a href="https://beta-bridge.simplefin.org/" target="_blank" rel="noopener">bridge.simplefin.org</a>,
+    then pulls balances and transactions from them.
+</p>
+
+<div class="alert alert-warning">
+    <strong>A setup token can only be claimed once.</strong> Pasting it below spends it permanently
+    — whether or not this app manages to save the result. If something goes wrong, generate a fresh
+    token at the Bridge (<em>My Accounts → Apps → New Connection → Create Setup Token</em>) rather
+    than retrying the same one. Your subscription and linked institutions are unaffected.
+</div>
+
+@if (connections is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <h2 class="h4 mt-4">Connections</h2>
+
+    @if (connections.Count == 0)
+    {
+        <p class="text-muted">No connections yet. Add one below.</p>
+    }
+    else
+    {
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Institution</th>
+                    <th>Mapped accounts</th>
+                    <th>Last sync</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var connection in connections)
+                {
+                    <tr>
+                        <td>@connection.InstitutionLabel</td>
+                        <td>@connection.MappedAccountCount</td>
+                        <td>
+                            @(connection.LastSyncAt?.ToString("g") ?? "never")
+                        </td>
+                        <td>
+                            @if (connection.NeedsRelink)
+                            {
+                                <span class="badge bg-danger">needs re-link</span>
+                            }
+                            else if (connection.LastSyncStatus == "PartialSuccess")
+                            {
+                                <span class="badge bg-warning text-dark">partial</span>
+                            }
+                            else if (connection.LastSyncStatus == "Failed")
+                            {
+                                <span class="badge bg-danger">failed</span>
+                            }
+                            else if (connection.LastSyncStatus == "Success")
+                            {
+                                <span class="badge bg-success">ok</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">not synced</span>
+                            }
+                            @if (connection.LastSyncErrorMessage is { } message)
+                            {
+                                <div class="small text-muted">@message</div>
+                            }
+                        </td>
+                        <td class="text-nowrap">
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    disabled="@busy"
+                                    @onclick="() => OpenMappingAsync(connection.Id)">
+                                Map accounts
+                            </button>
+                            <button class="btn btn-sm btn-primary"
+                                    disabled="@busy"
+                                    @onclick="() => SyncNowAsync(connection.Id)">
+                                Sync now
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (syncResult is not null)
+    {
+        <div class="alert @(syncResult.Succeeded ? "alert-success" : "alert-danger") mt-3">
+            @if (!syncResult.Succeeded)
+            {
+                <div>@syncResult.FailureMessage</div>
+                @if (syncResult.RequiresRelink)
+                {
+                    <div class="mt-2">
+                        Generate a new setup token at the Bridge and use <strong>Re-link</strong> below.
+                        Your account mappings and transaction history are kept.
+                    </div>
+                }
+            }
+            else
+            {
+                <div>
+                    <strong>@syncResult.InstitutionLabel</strong> synced.
+                </div>
+                <table class="table table-sm mt-2 mb-0">
+                    <thead>
+                        <tr>
+                            <th>Account</th>
+                            <th class="text-end">New</th>
+                            <th class="text-end">Updated</th>
+                            <th class="text-end">Skipped (already imported)</th>
+                            <th class="text-end">Kept your edits</th>
+                            <th class="text-end">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var account in syncResult.Accounts)
+                        {
+                            <tr>
+                                <td>@account.AccountName</td>
+                                @if (account.BalanceOnly)
+                                {
+                                    <td colspan="4" class="text-muted">
+                                        balance only — investment feeds report share movements, not
+                                        cash flows
+                                        @if (account.RemovedStaleRows > 0)
+                                        {
+                                            <span>
+                                                (removed @account.RemovedStaleRows previously synced
+                                                row(s))
+                                            </span>
+                                        }
+                                    </td>
+                                }
+                                else
+                                {
+                                    <td class="text-end">
+                                        @account.Inserted
+                                        @if (account.AutoCategorized > 0)
+                                        {
+                                            <span class="text-muted small" title="Filled in by a categorization rule">
+                                                (@account.AutoCategorized categorized)
+                                            </span>
+                                        }
+                                    </td>
+                                    <td class="text-end">@account.Updated</td>
+                                    <td class="text-end">
+                                        @account.SkippedBeforeCutoff
+                                        @if (account.Cutoff is { } cutoff)
+                                        {
+                                            <span class="text-muted small">(through @cutoff.ToString("M/d/yyyy"))</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">@account.ProtectedByUserEdit</td>
+                                }
+                                <td class="text-end">@account.Balance.ToString("C")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                @if (syncResult.Accounts.Any(a => a.HasUnreachableGap))
+                {
+                    <div class="mt-2">
+                        <strong>Gaps that syncing cannot fill.</strong>
+                        Syncs reach back @SyncCutoffCalculator.MaxLookbackDays days, and these
+                        accounts' history stops before that. Only a fresh QIF export from Quicken
+                        can cover the difference:
+                        <ul class="mb-0">
+                            @foreach (var account in syncResult.Accounts.Where(a => a.HasUnreachableGap))
+                            {
+                                <li>
+                                    <strong>@account.AccountName</strong> —
+                                    @account.UnreachableFrom!.Value.ToString("M/d/yyyy")
+                                    through @account.UnreachableTo!.Value.ToString("M/d/yyyy").
+                                    If the account was inactive over that period, nothing is missing.
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (syncResult.RemoteErrors.Count > 0)
+                {
+                    <div class="mt-2">
+                        <strong>SimpleFIN reported problems with some accounts.</strong>
+                        A partial sync looks identical to a clean one apart from this:
+                        <ul class="mb-0">
+                            @foreach (var error in syncResult.RemoteErrors)
+                            {
+                                <li>@error</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (syncResult.UnmappedRemoteAccounts.Count > 0)
+                {
+                    <div class="mt-2">
+                        <strong>Not mapped, so nothing was imported for them:</strong>
+                        <ul class="mb-0">
+                            @foreach (var name in syncResult.UnmappedRemoteAccounts)
+                            {
+                                <li>@name</li>
+                            }
+                        </ul>
+                        Use <em>Map accounts</em> to attach each one to a local account.
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    @if (mappingConnectionId is { } mappingId)
+    {
+        <h2 class="h4 mt-4">Map accounts</h2>
+        @if (mappingError is not null)
+        {
+            <div class="alert alert-danger">@mappingError</div>
+        }
+        @if (remoteAccounts is null)
+        {
+            <p><em>Asking SimpleFIN what accounts this connection covers...</em></p>
+        }
+        else if (remoteAccounts.Count == 0)
+        {
+            <p class="text-muted">This connection returned no accounts.</p>
+        }
+        else
+        {
+            <p class="text-muted">
+                These are the accounts SimpleFIN actually returned. Attach each one to a local
+                account, or leave it unmapped — an unmapped remote account is simply never synced.
+            </p>
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Remote account</th>
+                        <th>Institution</th>
+                        <th class="text-end">Balance</th>
+                        <th>Local account</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var remote in remoteAccounts)
+                    {
+                        var mapped = localAccounts?.FirstOrDefault(
+                            a => a.SimpleFinConnectionId == mappingId && a.SimpleFinAccountId == remote.Id);
+                        <tr>
+                            <td>@remote.Name <span class="text-muted small">@remote.Id</span></td>
+                            <td>@remote.Institution</td>
+                            <td class="text-end">@remote.Balance.ToString("C")</td>
+                            <td>
+                                <select class="form-select form-select-sm"
+                                        disabled="@busy"
+                                        value="@(mapped?.Id.ToString() ?? "")"
+                                        @onchange="e => MapAsync(mappingId, remote.Id, e.Value?.ToString())">
+                                    <option value="">— don't sync this —</option>
+                                    @foreach (var account in localAccounts ?? [])
+                                    {
+                                        <option value="@account.Id" selected="@(mapped?.Id == account.Id)">
+                                            @account.Name
+                                        </option>
+                                    }
+                                </select>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <h3 class="h5 mt-4">Re-link this institution</h3>
+        <p class="text-muted">
+            Use this if the saved credentials stopped working — for example after restoring the
+            database onto a different Windows account, which leaves the encryption key behind.
+            Mappings and history are kept.
+        </p>
+        <div class="row g-2 align-items-end mb-4">
+            <div class="col-md-8">
+                <label class="form-label">New setup token</label>
+                <input class="form-control" @bind="relinkToken" placeholder="Paste the Base64 setup token" />
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-outline-danger" disabled="@busy" @onclick="() => RelinkAsync(mappingId)">
+                    Replace credentials
+                </button>
+            </div>
+        </div>
+    }
+
+    <h2 class="h4 mt-4">Add a connection</h2>
+    @if (claimError is not null)
+    {
+        <div class="alert alert-danger">@claimError</div>
+    }
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label">Institution name</label>
+            <input class="form-control" @bind="newLabel" placeholder="e.g. Main Bank" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Setup token</label>
+            <input class="form-control" @bind="newToken" placeholder="Paste the Base64 setup token" />
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-primary" disabled="@busy" @onclick="ClaimAsync">
+                @if (busy)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                    <span> Claiming...</span>
+                }
+                else
+                {
+                    <span>Claim token</span>
+                }
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ConnectionSummary>? connections;
+    private List<Account>? localAccounts;
+    private List<RemoteAccountOption>? remoteAccounts;
+
+    private int? mappingConnectionId;
+    private ConnectionSyncResult? syncResult;
+
+    private string newLabel = "";
+    private string newToken = "";
+    private string relinkToken = "";
+    private string? claimError;
+    private string? mappingError;
+    private bool busy;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        connections = await Connections.GetConnectionsAsync();
+        localAccounts = await AccountService.GetAccountsAsync(includeClosed: true);
+    }
+
+    private async Task ClaimAsync()
+    {
+        claimError = null;
+        syncResult = null;
+        await SetBusyAsync();
+
+        var (connectionId, error) = await Connections.ClaimAsync(newLabel, newToken);
+        busy = false;
+
+        if (error is not null)
+        {
+            claimError = error;
+            return;
+        }
+
+        // The token is spent; clear it so a second click can't look like it might work.
+        newToken = "";
+        newLabel = "";
+        await RefreshAsync();
+        if (connectionId is { } id)
+            await OpenMappingAsync(id);
+    }
+
+    private async Task OpenMappingAsync(int connectionId)
+    {
+        mappingConnectionId = connectionId;
+        remoteAccounts = null;
+        mappingError = null;
+        await SetBusyAsync();
+
+        var (accounts, error, _) = await Connections.GetRemoteAccountsAsync(connectionId);
+        remoteAccounts = accounts;
+        mappingError = error;
+        busy = false;
+    }
+
+    private async Task MapAsync(int connectionId, string remoteAccountId, string? localAccountId)
+    {
+        mappingError = null;
+
+        if (string.IsNullOrEmpty(localAccountId))
+        {
+            var current = localAccounts?.FirstOrDefault(
+                a => a.SimpleFinConnectionId == connectionId && a.SimpleFinAccountId == remoteAccountId);
+            if (current is not null)
+                await Connections.UnmapAccountAsync(current.Id);
+        }
+        else if (int.TryParse(localAccountId, out var accountId))
+        {
+            mappingError = await Connections.MapAccountAsync(accountId, connectionId, remoteAccountId);
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task RelinkAsync(int connectionId)
+    {
+        mappingError = null;
+        await SetBusyAsync();
+        mappingError = await Connections.RelinkAsync(connectionId, relinkToken);
+        busy = false;
+
+        relinkToken = "";
+        await RefreshAsync();
+    }
+
+    private async Task SyncNowAsync(int connectionId)
+    {
+        syncResult = null;
+        await SetBusyAsync();
+        syncResult = await Sync.SyncConnectionAsync(connectionId);
+        busy = false;
+        await RefreshAsync();
+    }
+
+    // Blazor only re-renders once a handler returns, so a busy flag set inline never reaches the
+    // browser. Yielding lets the spinner paint before the network call starts.
+    private async Task SetBusyAsync()
+    {
+        busy = true;
+        StateHasChanged();
+        await Task.Yield();
+    }
+}

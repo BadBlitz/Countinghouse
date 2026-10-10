@@ -1,0 +1,82 @@
+# main is the production branch: every push to it publishes the version in
+# src/Countinghouse.Desktop/Countinghouse.Desktop.csproj as a GitHub Release, which installed copies pick
+# up on their next startup. Bump <Version> on develop, then merge develop into main.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+env:
+  # NOT "Countinghouse". Velopack installs to %LOCALAPPDATA%\<packId> and deletes that directory on
+  # uninstall, and %LOCALAPPDATA%\Countinghouse is where the database and key ring live. Sharing the
+  # name would make uninstalling the app delete every account and transaction.
+  PACK_ID: Countinghouse.Desktop
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      exists: ${{ steps.read.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # A merge that didn't bump the version is skipped rather than failed or published over the
+      # existing release: replacing a release's packages under the same version would leave
+      # installed copies unable to tell they're out of date.
+      - id: read
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -oP '(?<=<Version>)[^<]+' src/Countinghouse.Desktop/Countinghouse.Desktop.csproj)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::v$version is already released; bump <Version> in Countinghouse.Desktop.csproj to publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: version
+    if: needs.version.outputs.exists == 'false'
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - run: dotnet tool restore
+
+      - run: dotnet test -c Release
+
+      # Self-contained, so the installer needs nothing on the machine but WebView2, which ships
+      # with Windows 11.
+      - run: >
+          dotnet publish src/Countinghouse.Desktop -c Release -r win-x64 --self-contained
+          -o publish
+
+      # The previous release is what the delta package is computed against.
+      - run: >
+          dotnet vpk download github --repoUrl ${{ github.server_url }}/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+
+      - run: >
+          dotnet vpk pack --packId ${{ env.PACK_ID }} --packVersion ${{ env.VERSION }}
+          --packDir publish --mainExe Countinghouse.exe --packTitle Countinghouse --packAuthors "Kevin Beckman"
+          --icon src/Countinghouse.Desktop/wwwroot/favicon.ico
+
+      # Creates the vX.Y.Z tag on the commit being released.
+      - run: >
+          dotnet vpk upload github --repoUrl ${{ github.server_url }}/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }} --publish
+          --tag v${{ env.VERSION }} --targetCommitish ${{ github.sha }}
+          --releaseName "Countinghouse ${{ env.VERSION }}"

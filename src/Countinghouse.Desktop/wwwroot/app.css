@@ -1,0 +1,398 @@
+/* Countinghouse theme. The look is taken from a paper account book: ledger-green rules, ink
+   text, red ink reserved for negative amounts, and figures that line up in columns. Bootstrap
+   does the layout; this file retunes its variables so every page picks the theme up without
+   page-by-page styling. */
+
+@font-face {
+    font-family: "Public Sans";
+    src: url("fonts/public-sans-latin-wght-normal.woff2") format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Public Sans";
+    src: url("fonts/public-sans-latin-wght-italic.woff2") format("woff2");
+    font-weight: 100 900;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Libre Caslon Text";
+    src: url("fonts/libre-caslon-text-latin-400-normal.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    --paper: #FBFCFA;
+    --paper-deep: #F0F4EF;
+    --rule: #D5DFD6;
+    --rule-strong: #9FB5A5;
+    --ink: #1F2B3A;
+    --ink-soft: #56645E;
+    --green: #2E6B4F;
+    --green-deep: #245740;
+    --green-wash: #E4EFE8;
+    --red: #B3261E;
+    --red-wash: #FBEAE8;
+    --amber: #7F5300;
+    --amber-wash: #FFF2D2;
+
+    --font-ui: "Public Sans", "Segoe UI", system-ui, sans-serif;
+    --font-title: "Libre Caslon Text", Georgia, serif;
+
+    --bs-body-font-family: var(--font-ui);
+    --bs-body-font-size: 0.9375rem;
+    --bs-body-line-height: 1.55;
+    --bs-body-bg: var(--paper);
+    --bs-body-color: var(--ink);
+    --bs-emphasis-color: var(--ink);
+    --bs-secondary-color: var(--ink-soft);
+    --bs-border-color: var(--rule);
+    --bs-border-radius: 0.375rem;
+    --bs-border-radius-sm: 0.25rem;
+
+    --bs-link-color: var(--green);
+    --bs-link-color-rgb: 46, 107, 79;
+    --bs-link-hover-color: var(--green-deep);
+    --bs-link-hover-color-rgb: 36, 87, 64;
+
+    --bs-primary-rgb: 46, 107, 79;
+    --bs-success-rgb: 46, 107, 79;
+    --bs-danger-rgb: 179, 38, 30;
+    --bs-warning-rgb: 232, 176, 60;
+    --bs-secondary-rgb: 86, 100, 94;
+    --bs-light-rgb: 240, 244, 239;
+
+    --bs-success-text-emphasis: var(--green-deep);
+    --bs-success-bg-subtle: var(--green-wash);
+    --bs-success-border-subtle: #BCD6C5;
+    --bs-danger-text-emphasis: #8C1D17;
+    --bs-danger-bg-subtle: var(--red-wash);
+    --bs-danger-border-subtle: #F0C3BE;
+    --bs-warning-text-emphasis: var(--amber);
+    --bs-warning-bg-subtle: var(--amber-wash);
+    --bs-warning-border-subtle: #EED49A;
+    --bs-info-text-emphasis: var(--ink);
+    --bs-info-bg-subtle: var(--paper-deep);
+    --bs-info-border-subtle: var(--rule);
+    --bs-light-text-emphasis: var(--ink-soft);
+    --bs-light-bg-subtle: var(--paper-deep);
+    --bs-light-border-subtle: var(--rule);
+    --bs-secondary-text-emphasis: var(--ink-soft);
+    --bs-secondary-bg-subtle: var(--paper-deep);
+    --bs-secondary-border-subtle: var(--rule);
+
+    --bs-focus-ring-color: rgba(46, 107, 79, 0.35);
+}
+
+body {
+    font-feature-settings: "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    text-decoration: none;
+}
+
+    a:hover {
+        text-decoration: underline;
+    }
+
+/* Names in tables read as ink, like entries in a book; they turn green only when pointed at. */
+.table td > a:not(.badge):not(.btn) {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--rule-strong);
+    text-underline-offset: 0.2em;
+}
+
+    .table td > a:not(.badge):not(.btn):hover {
+        color: var(--green);
+        text-decoration-color: currentColor;
+    }
+
+/* Page titles are the one place the Caslon appears, besides the wordmark. */
+h1 {
+    font-family: var(--font-title);
+    font-weight: 400;
+    font-size: 2rem;
+    letter-spacing: -0.01em;
+    margin-bottom: 1.25rem;
+}
+
+h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.005em;
+}
+
+h5 {
+    font-size: 1.0625rem;
+}
+
+h1:focus {
+    outline: none;
+}
+
+.text-muted {
+    color: var(--ink-soft) !important;
+}
+
+.text-danger {
+    color: var(--red) !important;
+}
+
+.text-success {
+    color: var(--green) !important;
+}
+
+.text-warning {
+    color: var(--amber) !important;
+}
+
+/* Tables are ruled like ledger paper: light green lines, headings in plain weight rather than
+   capitals, and figures right-aligned in tabular numerals. */
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--ink);
+    --bs-table-border-color: var(--rule);
+    --bs-table-hover-bg: rgba(46, 107, 79, 0.05);
+    --bs-table-hover-color: var(--ink);
+    --bs-table-striped-bg: rgba(46, 107, 79, 0.03);
+}
+
+.table > thead th {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--rule-strong);
+    white-space: nowrap;
+}
+
+.table > :not(caption) > * > * {
+    padding: 0.45rem 0.6rem;
+}
+
+.table td {
+    overflow-wrap: break-word;
+}
+
+/* In the register, long payees and memos wrap rather than push the table past the window. */
+.table.register td:not(.text-end) {
+    overflow-wrap: anywhere;
+}
+
+code {
+    color: var(--ink-soft);
+    font-size: 0.875em;
+}
+
+.table-sm > :not(caption) > * > * {
+    padding: 0.35rem 0.5rem;
+}
+
+.text-end {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Buttons */
+.btn {
+    font-weight: 500;
+}
+
+.btn-primary {
+    --bs-btn-bg: var(--green);
+    --bs-btn-border-color: var(--green);
+    --bs-btn-hover-bg: var(--green-deep);
+    --bs-btn-hover-border-color: var(--green-deep);
+    --bs-btn-active-bg: var(--green-deep);
+    --bs-btn-active-border-color: var(--green-deep);
+    --bs-btn-disabled-bg: var(--green);
+    --bs-btn-disabled-border-color: var(--green);
+}
+
+.btn-success {
+    --bs-btn-bg: var(--green);
+    --bs-btn-border-color: var(--green);
+    --bs-btn-hover-bg: var(--green-deep);
+    --bs-btn-hover-border-color: var(--green-deep);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--green);
+    --bs-btn-border-color: var(--green);
+    --bs-btn-hover-bg: var(--green);
+    --bs-btn-hover-border-color: var(--green);
+    --bs-btn-active-bg: var(--green-deep);
+}
+
+.btn-outline-secondary {
+    --bs-btn-color: var(--ink);
+    --bs-btn-border-color: var(--rule-strong);
+    --bs-btn-hover-color: var(--ink);
+    --bs-btn-hover-bg: var(--paper-deep);
+    --bs-btn-hover-border-color: var(--rule-strong);
+    --bs-btn-active-color: var(--ink);
+    --bs-btn-active-bg: var(--rule);
+    --bs-btn-active-border-color: var(--rule-strong);
+}
+
+.btn-danger {
+    --bs-btn-bg: var(--red);
+    --bs-btn-border-color: var(--red);
+    --bs-btn-hover-bg: #8C1D17;
+    --bs-btn-hover-border-color: #8C1D17;
+}
+
+.btn-outline-danger {
+    --bs-btn-color: var(--red);
+    --bs-btn-border-color: var(--red);
+    --bs-btn-hover-bg: var(--red);
+    --bs-btn-hover-border-color: var(--red);
+}
+
+.btn:focus-visible, .form-control:focus, .form-select:focus, .form-check-input:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 0.2rem var(--bs-focus-ring-color);
+}
+
+/* Buttons repeated on every table row stay quiet until pointed at, so a long register reads
+   as entries rather than a column of controls. */
+.table .btn-sm.btn-outline-secondary,
+.table .btn-sm.btn-outline-danger,
+.table .btn-sm.btn-outline-primary {
+    --bs-btn-border-color: transparent;
+    --bs-btn-padding-x: 0.45rem;
+}
+
+.table .btn-sm.btn-outline-danger {
+    --bs-btn-hover-color: #fff;
+}
+
+/* Forms */
+.form-control, .form-select {
+    border-color: var(--rule-strong);
+    background-color: #fff;
+}
+
+.form-label {
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+.form-check-input:checked {
+    background-color: var(--green);
+    border-color: var(--green);
+}
+
+/* Explanatory panels carry a coloured rule on the left rather than a full box, so the long
+   how-this-works notes read as margin notes and the page stays calm. */
+.alert {
+    border-width: 0 0 0 3px;
+    border-radius: 0.25rem;
+    padding: 0.75rem 1rem;
+}
+
+.alert-info, .alert-light, .alert-secondary {
+    --bs-alert-border-color: var(--rule-strong);
+}
+
+.alert-success {
+    --bs-alert-border-color: var(--green);
+}
+
+.alert-warning {
+    --bs-alert-border-color: #D9A441;
+}
+
+.alert-danger {
+    --bs-alert-border-color: var(--red);
+}
+
+/* Cards */
+.card {
+    --bs-card-bg: #fff;
+    --bs-card-border-color: var(--rule);
+    --bs-card-cap-bg: var(--paper-deep);
+}
+
+.card.text-bg-light {
+    background-color: #fff !important;
+    color: var(--ink) !important;
+}
+
+/* Status pills for sync and balance-check state. Bootstrap's badges are recoloured to the same
+   scheme so every page's markup matches. */
+.badge {
+    font-weight: 600;
+    font-size: 0.75rem;
+    padding: 0.3em 0.65em;
+    border-radius: 999px;
+}
+
+.badge.text-bg-success, .badge.bg-success {
+    background-color: var(--green-wash) !important;
+    color: var(--green-deep) !important;
+}
+
+.badge.text-bg-warning, .badge.bg-warning {
+    background-color: var(--amber-wash) !important;
+    color: var(--amber) !important;
+}
+
+.badge.text-bg-danger, .badge.bg-danger {
+    background-color: var(--red-wash) !important;
+    color: #8C1D17 !important;
+}
+
+.badge.text-bg-light, .badge.text-bg-secondary, .badge.bg-secondary {
+    background-color: var(--paper-deep) !important;
+    color: var(--ink-soft) !important;
+}
+
+a.badge:hover {
+    filter: brightness(0.96);
+}
+
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--green);
+}
+
+.invalid {
+    outline: 1px solid var(--red);
+}
+
+.validation-message {
+    color: var(--red);
+}
+
+.blazor-error-boundary {
+    background: var(--red-wash);
+    border-left: 3px solid var(--red);
+    padding: 1rem;
+    color: #8C1D17;
+}
+
+    .blazor-error-boundary::after {
+        content: "Something went wrong on this page. Go back to the dashboard and try again.";
+    }
+
+.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
+    color: var(--bs-secondary-color);
+    text-align: end;
+}
+
+.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
+    text-align: start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        transition: none !important;
+        animation: none !important;
+    }
+}

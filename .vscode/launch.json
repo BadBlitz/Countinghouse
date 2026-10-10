@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // One configuration now instead of three. There is no Kestrel to wait for, no port to
+      // pick and no browser to open — the components run in-process behind a WebView2 control,
+      // so a plain .NET debug session covers Razor components, domain services and EF alike.
+      "name": "Countinghouse (desktop)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-desktop",
+      "program": "${workspaceFolder}/src/Countinghouse.Desktop/bin/Debug/net10.0-windows10.0.19041.0/Countinghouse.dll",
+      "cwd": "${workspaceFolder}/src/Countinghouse.Desktop/bin/Debug/net10.0-windows10.0.19041.0",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    },
+    {
+      // Attach to an already-running app — e.g. one started by the "watch" task, so you
+      // keep hot reload and still get breakpoints. Pick the Countinghouse process.
+      "name": "Attach to a running Countinghouse process",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    }
+  ]
+}

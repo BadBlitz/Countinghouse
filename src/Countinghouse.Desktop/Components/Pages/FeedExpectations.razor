@@ -1,0 +1,138 @@
+@page "/settings/feed-expectations"
+@inject AccountService AccountService
+@inject MovementExpectationSuggester Suggester
+@inject FeedHealthService FeedHealthService
+
+<PageTitle>Feed Expectations - Countinghouse</PageTitle>
+
+<h1>Feed expectations</h1>
+
+<p class="text-muted">
+    A feed can die without saying so — the balance keeps being served, it just stops changing.
+    Telling Countinghouse how often an account <em>should</em> move is what makes that visible, because
+    "hasn't changed in a month" means something very different for a checking account than for a
+    savings account that only earns interest.
+</p>
+
+@if (notice is not null)
+{
+    <div class="alert alert-success py-2">@notice</div>
+}
+
+@if (rows is null)
+{
+    <p><em>Loading…</em></p>
+}
+else if (rows.Count == 0)
+{
+    <p>No synced accounts yet. <a href="settings/simplefin">Link an institution</a> first.</p>
+}
+else
+{
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr>
+                <th>Account</th>
+                <th>Expect it to move</th>
+                <th>Suggested from history</th>
+                <th>Now</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in rows)
+            {
+                <tr>
+                    <td><a href="accounts/@row.Suggestion.AccountId">@row.Suggestion.AccountName</a></td>
+                    <td>
+                        <div class="d-flex gap-2 align-items-center">
+                            <select class="form-select form-select-sm" style="width: 11rem;" @bind="row.Expectation">
+                                <option value="@MovementExpectation.None">no expectation</option>
+                                <option value="@MovementExpectation.MarketDays">every trading day</option>
+                                <option value="@MovementExpectation.WithinDays">at least every…</option>
+                            </select>
+                            @if (row.Expectation == MovementExpectation.WithinDays)
+                            {
+                                <input type="number" min="1" class="form-control form-control-sm"
+                                       style="width: 5.5rem;" @bind="row.Days" />
+                                <span class="small text-muted">days</span>
+                            }
+                        </div>
+                    </td>
+                    <td class="small text-muted">
+                        @Describe(row.Suggestion.Suggested, row.Suggestion.SuggestedDays)
+                        <div>@row.Suggestion.Rationale</div>
+                    </td>
+                    <td>
+                        @{
+                            var health = healthByAccount?.GetValueOrDefault(row.Suggestion.AccountId);
+                        }
+                        <FeedHealthBadge Health="health" />
+                    </td>
+                    <td class="text-end">
+                        @if (row.Suggestion.DiffersFromCurrent)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    @onclick="() => Accept(row)">Use suggestion</button>
+                        }
+                        <button class="btn btn-sm btn-primary" @onclick="() => Save(row)">Save</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <p class="text-muted small">
+        Suggestions are measured from the register, never applied on their own. History says what an
+        account <em>has</em> done, not what it is for: a card paid off and left at zero suggests
+        "never moves", which is true and useless.
+    </p>
+}
+
+@code {
+    private sealed class Row
+    {
+        public required MovementSuggestion Suggestion { get; init; }
+        public MovementExpectation Expectation { get; set; }
+        public int? Days { get; set; }
+    }
+
+    private List<Row>? rows;
+    private Dictionary<int, AccountFeedHealth>? healthByAccount;
+    private string? notice;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var suggestions = await Suggester.SuggestAllAsync();
+        rows = suggestions.Select(s => new Row
+        {
+            Suggestion = s,
+            Expectation = s.Current,
+            Days = s.CurrentDays,
+        }).ToList();
+        healthByAccount = (await FeedHealthService.CheckAllAsync()).ToDictionary(h => h.AccountId);
+    }
+
+    private void Accept(Row row)
+    {
+        row.Expectation = row.Suggestion.Suggested;
+        row.Days = row.Suggestion.SuggestedDays;
+    }
+
+    private async Task Save(Row row)
+    {
+        await AccountService.SetMovementExpectationAsync(
+            row.Suggestion.AccountId, row.Expectation, row.Days);
+        notice = $"Saved the expectation for {row.Suggestion.AccountName}.";
+        await LoadAsync();
+    }
+
+    private static string Describe(MovementExpectation expectation, int? days) => expectation switch
+    {
+        MovementExpectation.MarketDays => "every trading day",
+        MovementExpectation.WithinDays => $"at least every {days} days",
+        _ => "no expectation",
+    };
+}

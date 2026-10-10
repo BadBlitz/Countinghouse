@@ -1,0 +1,214 @@
+@page "/settings/backup"
+@using Countinghouse.Domain
+@inject DatabaseBackupService BackupService
+
+<PageTitle>Backup - Countinghouse</PageTitle>
+
+<h1>Backup</h1>
+
+@if (status is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="alert @(status.ReminderDue ? "alert-warning" : "alert-success")">
+        <strong>Destination:</strong>
+        @if (status.DestinationConfigured)
+        {
+            <code>@status.Destination</code>
+        }
+        else
+        {
+            <span>not set yet — configure one below.</span>
+        }
+        <br />
+        @if (status.LastSuccessAt is null)
+        {
+            <span>No successful backup yet.</span>
+        }
+        else
+        {
+            <span>
+                Last successful backup @status.LastSuccessAt.Value.ToString("M/d/yyyy h:mm tt")
+                (@status.DaysSinceLastSuccess day(s) ago).
+            </span>
+        }
+    </div>
+
+    @* A failed attempt can coexist with an earlier success, so this is separate from the status
+       alert above rather than replacing it. *@
+    @if (status.LastError is not null)
+    {
+        <div class="alert alert-warning">@status.LastError</div>
+    }
+
+    <div class="card my-3" style="max-width: 40rem;">
+        <div class="card-body">
+            <h6 class="card-title">Backup destination</h6>
+            <input type="text" class="form-control form-control-sm" @bind="destinationInput"
+                   placeholder="\\server\share\Countinghouse\backups" />
+            <div class="form-text">
+                Stored in the database rather than a config file: it's a path on your own network,
+                and this repo is public.
+            </div>
+            @if (destinationError is not null)
+            {
+                <div class="alert alert-danger mt-2 py-1">@destinationError</div>
+            }
+            <button class="btn btn-primary btn-sm mt-2" disabled="@destinationBusy" @onclick="SaveDestinationAsync">
+                @if (destinationBusy)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                    <span> Saving...</span>
+                }
+                else
+                {
+                    <span>Save</span>
+                }
+            </button>
+        </div>
+    </div>
+
+    <button class="btn btn-primary" disabled="@backupBusy" @onclick="RunBackupAsync">
+        @if (backupBusy)
+        {
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+            <span> Backing up...</span>
+        }
+        else
+        {
+            <span>Back up now</span>
+        }
+    </button>
+
+    @if (lastOutcome is not null)
+    {
+        @if (lastOutcome.Succeeded)
+        {
+            <div class="alert alert-success mt-3">
+                Backup succeeded: <strong>@lastOutcome.Run?.FileName</strong>
+                (@FormatSize(lastOutcome.Run?.SizeBytes ?? 0)).
+                @(lastOutcome.Run?.AccountCount.ToString("N0")) account(s),
+                @(lastOutcome.Run?.TransactionCount.ToString("N0")) transaction(s) verified in the snapshot.
+            </div>
+        }
+        else if (lastOutcome.LocalCopyKept)
+        {
+            <div class="alert alert-warning mt-3">
+                @lastOutcome.Error
+                The local copy is kept at <code>@AppPaths.BackupStagingDirectory</code> — it's already
+                verified, so retrying once the destination is reachable is safe.
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-danger mt-3">@lastOutcome.Error</div>
+        }
+    }
+
+    <h6 class="mt-4">Recent runs</h6>
+    @if (status.Recent.Count == 0)
+    {
+        <p class="text-muted">No backups yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Result</th>
+                    <th>Destination</th>
+                    <th>File</th>
+                    <th class="text-end">Size</th>
+                    <th class="text-end">Transactions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var run in status.Recent)
+                {
+                    <tr>
+                        <td>@run.CompletedAt.ToString("M/d/yyyy h:mm tt")</td>
+                        <td>
+                            @if (run.Succeeded)
+                            {
+                                <span class="badge bg-success">ok</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning" title="@run.ErrorMessage">failed</span>
+                            }
+                        </td>
+                        <td>@run.Destination</td>
+                        <td>@run.FileName</td>
+                        <td class="text-end">@FormatSize(run.SizeBytes)</td>
+                        <td class="text-end">@run.TransactionCount.ToString("N0")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <div class="alert alert-info mt-4">
+        <strong>Why backups live outside the database's own folder.</strong> The live database
+        stays on local disk on purpose: it runs in WAL mode, which needs shared memory the OS only
+        provides locally, and a cloud sync client (OneDrive, Dropbox) uploads the
+        <code>.db</code>/<code>-wal</code>/<code>-shm</code> files independently, so the three can
+        drift out of sync. Backups are safe to put anywhere — a NAS share, a synced folder — because
+        each one is taken with SQLite's <code>VACUUM INTO</code>, verified with
+        <code>integrity_check</code>, and then never reopened.
+    </div>
+}
+
+@code {
+    private BackupStatus? status;
+    private string destinationInput = "";
+    private string? destinationError;
+    private bool destinationBusy;
+
+    private bool backupBusy;
+    private BackupOutcome? lastOutcome;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshStatusAsync();
+    }
+
+    private async Task RefreshStatusAsync()
+    {
+        status = await BackupService.GetStatusAsync();
+        destinationInput = status.Destination ?? "";
+    }
+
+    private async Task SaveDestinationAsync()
+    {
+        destinationError = null;
+        await SetBusyAsync(() => destinationBusy = true);
+        destinationError = await BackupService.SetDestinationAsync(destinationInput);
+        destinationBusy = false;
+        if (destinationError is null)
+            await RefreshStatusAsync();
+    }
+
+    private async Task RunBackupAsync()
+    {
+        lastOutcome = null;
+        await SetBusyAsync(() => backupBusy = true);
+        lastOutcome = await BackupService.CreateBackupAsync();
+        backupBusy = false;
+        await RefreshStatusAsync();
+    }
+
+    // Blazor only re-renders after a handler returns, so a busy flag set inline never reaches
+    // the browser. Yielding once lets the spinner paint before the slow work (network copy) starts.
+    private async Task SetBusyAsync(Action setFlag)
+    {
+        setFlag();
+        StateHasChanged();
+        await Task.Yield();
+    }
+
+    private static string FormatSize(long bytes) =>
+        bytes < 1024 * 1024 ? $"{bytes / 1024.0:N0} KB" : $"{bytes / (1024.0 * 1024):N1} MB";
+}

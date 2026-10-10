@@ -1,0 +1,189 @@
+@page "/"
+@inject AccountService AccountService
+@inject TransactionService TransactionService
+@inject DatabaseBackupService BackupService
+@inject BalanceCheckService BalanceCheckService
+@inject FeedHealthService FeedHealthService
+
+<PageTitle>Dashboard - Countinghouse</PageTitle>
+
+<h1 class="visually-hidden">Dashboard</h1>
+
+@if (accounts is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <section class="net-worth" aria-label="Net worth">
+        <p class="net-worth-label">Net worth</p>
+        <p class="net-worth-figure @(netWorth < 0 ? "negative" : "")">@netWorth.ToString("C2")</p>
+        <p class="net-worth-note">Across @OpenCount @(OpenCount == 1 ? "account" : "accounts")</p>
+    </section>
+
+    @if (backupStatus is { ReminderDue: true })
+    {
+        <div class="alert alert-warning">
+            @if (!backupStatus.DestinationConfigured)
+            {
+                <span>No backup destination is set, so nothing is being backed up.</span>
+            }
+            else if (backupStatus.LastSuccessAt is null)
+            {
+                <span>There has never been a successful backup.</span>
+            }
+            else
+            {
+                <span>It's been @backupStatus.DaysSinceLastSuccess day(s) since the last successful backup.</span>
+            }
+            <a href="settings/backup">@(backupStatus.DestinationConfigured ? "Back up now" : "Set up a destination")</a>.
+        </div>
+    }
+
+    @if (accounts.Count == 0)
+    {
+        <div class="empty">
+            <p>No accounts yet. Add one by hand, or create several at once from an account plan.</p>
+            <a class="btn btn-primary" href="accounts/new">Add account</a>
+            <a class="btn btn-outline-secondary ms-2" href="settings/setup-accounts">Set up accounts</a>
+        </div>
+    }
+    else
+    {
+        <table class="table ledger">
+            <thead>
+                <tr>
+                    <th scope="col">Account</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Updated</th>
+                    <th scope="col" class="text-end">Balance</th>
+                </tr>
+            </thead>
+            @foreach (var group in accounts.GroupBy(a => a.AccountType))
+            {
+                var subtotal = group.Where(a => !a.IsClosed).Sum(a => a.CurrentBalance);
+                <tbody>
+                    <tr class="group-row">
+                        <th scope="rowgroup" colspan="3">@GroupLabel(group.Key)</th>
+                        <td class="text-end money @(subtotal < 0 ? "negative" : "")">
+                            @* A subtotal of one account only repeats the line below it. *@
+                            @(group.Count() > 1 ? subtotal.ToString("C2") : "")
+                        </td>
+                    </tr>
+                    @foreach (var account in group)
+                    {
+                        <tr class="@(account.IsClosed ? "closed" : "")">
+                            <td class="account-name"><a href="accounts/@account.Id">@account.Name</a></td>
+                            <td>@AccountStatus(account)</td>
+                            <td class="text-muted">@(account.BalanceAsOf?.ToString("MMM d") ?? "")</td>
+                            <td class="text-end money @(account.CurrentBalance < 0 ? "negative" : "")">
+                                @account.CurrentBalance.ToString("C2")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            }
+        </table>
+
+        <h2 class="section-title">Recent activity</h2>
+        @if (recent is null || recent.Count == 0)
+        {
+            <p class="text-muted">No transactions yet.</p>
+        }
+        else
+        {
+            <table class="table recent">
+                <thead>
+                    <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">Payee</th>
+                        <th scope="col">Category</th>
+                        <th scope="col">Account</th>
+                        <th scope="col" class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var txn in recent)
+                    {
+                        <tr>
+                            <td class="text-muted text-nowrap">@txn.PostedDate.ToString("MMM d")</td>
+                            <td>@txn.Payee</td>
+                            <td class="text-muted">@txn.Category?.FullName</td>
+                            <td><a href="accounts/@txn.AccountId">@txn.Account?.Name</a></td>
+                            <td class="text-end money @(txn.Amount < 0 ? "negative" : "")">@txn.Amount.ToString("C2")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+}
+
+@code {
+    private List<Account>? accounts;
+    private List<Transaction>? recent;
+    private decimal netWorth;
+    private BackupStatus? backupStatus;
+    private Dictionary<int, AccountBalanceCheck>? checks;
+    private Dictionary<int, AccountFeedHealth>? feedHealth;
+
+    private int OpenCount => accounts?.Count(a => !a.IsClosed) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        accounts = await AccountService.GetAccountsAsync();
+        netWorth = await AccountService.GetNetWorthAsync();
+        recent = await TransactionService.GetRecentAsync();
+        backupStatus = await BackupService.GetStatusAsync();
+        // Read-only arithmetic — it never marks anything reconciled. See BalanceCheckService.
+        checks = (await BalanceCheckService.CheckAllAsync()).ToDictionary(c => c.AccountId);
+        // Whether the register adds up and whether the feed is alive are different questions —
+        // a frozen feed reads as an ordinary difference to the register check.
+        feedHealth = (await FeedHealthService.CheckAllAsync()).ToDictionary(h => h.AccountId);
+    }
+
+    // One status per account that names a problem only when there is one. The register check and
+    // the feed check stay separate underneath; they just share a column here.
+    private RenderFragment AccountStatus(Account account) => __builder =>
+    {
+        if (account.SimpleFinConnectionId is null)
+        {
+            <span class="text-muted">Manual</span>
+            return;
+        }
+
+        var check = checks?.GetValueOrDefault(account.Id);
+        var health = feedHealth?.GetValueOrDefault(account.Id);
+        var registerOff = check is { Applies: true } && check.Status != BalanceCheckStatus.Balanced;
+        var feedOff = health is { Applies: true } && health.Status != FeedHealthStatus.Ok;
+
+        if (registerOff)
+        {
+            <a href="accounts/@account.Id" class="badge text-bg-warning text-decoration-none me-1"
+               title="@(check!.Note ?? "The register doesn't add up to the balance the bank reports.")">
+                Off by @Math.Abs(check.Difference).ToString("C2")
+            </a>
+        }
+        if (feedOff)
+        {
+            <FeedHealthBadge Health="health" />
+        }
+        if (!registerOff && !feedOff)
+        {
+            <span class="in-sync" title="The bank feed is current and the register adds up to its balance.">
+                &#x2713; In sync
+            </span>
+        }
+    };
+
+    private static string GroupLabel(AccountType type) => type switch
+    {
+        AccountType.Checking => "Checking",
+        AccountType.Savings => "Savings",
+        AccountType.CreditCard => "Credit cards",
+        AccountType.Mortgage => "Mortgage",
+        AccountType.Investment => "Investments",
+        AccountType.Manual => "Other",
+        _ => type.ToString(),
+    };
+}

@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Countinghouse.Domain\Countinghouse.Domain.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Setup-token decoding and the epoch conversion are internal but are exactly where a bug
+       would be expensive: a bad decode wastes a single-use token, and an off-by-one epoch
+       silently shifts the sync cutoff by a day. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Countinghouse.Tests" />
+  </ItemGroup>
+
+</Project>

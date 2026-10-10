@@ -1,0 +1,38 @@
+@using Countinghouse.Desktop.Services
+@implements IDisposable
+@inject AppUpdateService Updates
+
+@switch (Updates.State)
+{
+    case UpdateState.ReadyToRestart:
+        <p class="mb-2">Version @Updates.AvailableVersion is ready to install.</p>
+        <button class="btn btn-sm btn-primary w-100" @onclick="Updates.RestartToApply">Restart to update</button>
+        break;
+    case UpdateState.Downloading:
+        <p class="text-muted mb-0">Downloading @Updates.AvailableVersion… @Updates.DownloadPercent%</p>
+        break;
+    case UpdateState.Checking:
+        <p class="text-muted mb-0">Checking for updates…</p>
+        break;
+    case UpdateState.NotInstalled:
+        <p class="text-muted mb-0">Development build</p>
+        break;
+    default:
+        <p class="text-muted mb-1" title="@Updates.Error">
+            Version @Updates.CurrentVersion
+            @if (Updates.State == UpdateState.Failed)
+            {
+                <br /><span class="text-warning">Couldn't check for updates.</span>
+            }
+        </p>
+        <button class="btn btn-link btn-sm p-0" @onclick="Updates.CheckAsync">Check for updates</button>
+        break;
+}
+
+@code {
+    protected override void OnInitialized() => Updates.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Updates.Changed -= OnChanged;
+}

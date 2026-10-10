@@ -1,0 +1,82 @@
+.chart {
+    position: relative;
+    max-width: 50rem;
+    margin: 0 0 1.5rem;
+}
+
+    .chart svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+    }
+
+.grid {
+    stroke: var(--rule);
+    stroke-width: 1;
+}
+
+.zero {
+    stroke: var(--rule-strong);
+    stroke-width: 1;
+}
+
+.axis {
+    fill: var(--ink-soft);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.series {
+    fill: none;
+    stroke: var(--green);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.marker {
+    fill: var(--green);
+    stroke: var(--paper);
+    stroke-width: 2;
+}
+
+    .marker.negative {
+        fill: var(--red);
+    }
+
+.crosshair {
+    stroke: var(--rule-strong);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+}
+
+.hit {
+    fill: transparent;
+}
+
+.chart-tip {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: var(--bs-border-radius-sm);
+    padding: 0.25rem 0.5rem;
+    pointer-events: none;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+}
+
+.tip-label {
+    color: var(--ink-soft);
+}
+
+.tip-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.money-table {
+    max-width: 50rem;
+}

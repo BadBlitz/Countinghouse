@@ -1,0 +1,124 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "migrationName",
+      "type": "promptString",
+      "description": "Migration name (PascalCase, e.g. AddReconciliationSession)"
+    }
+  ],
+  "tasks": [
+    {
+      // Default build task (Ctrl+Shift+B). The launch config depends on this one.
+      "label": "build",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/Countinghouse.sln", "/consoleloggerparameters:NoSummary"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "silent", "clear": true }
+    },
+    {
+      // Faster pre-launch build: only the desktop project and what it depends on.
+      "label": "build-desktop",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/Countinghouse.Desktop/Countinghouse.Desktop.csproj",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "silent", "clear": true }
+    },
+    {
+      "label": "test",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "${workspaceFolder}/Countinghouse.sln"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
+      // Hot reload for Razor/C# edits without restarting. Not a debug session — use the
+      // "Countinghouse (desktop)" launch config when you need breakpoints. There is no launch
+      // profile to name any more; the project has no launchSettings.json.
+      "label": "watch",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["watch", "run"],
+      "options": { "cwd": "${workspaceFolder}/src/Countinghouse.Desktop" },
+      "isBackground": true,
+      // A background task needs begin/end patterns, or VS Code never considers it started
+      // and leaves the task spinning. There is no "Now listening on" line to wait for here.
+      "problemMatcher": {
+        "base": "$msCompile",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*(Building\.\.\.|File changed).*$",
+          "endsPattern": "^.*(Started|Hot reload).*$"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "clean",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["clean", "${workspaceFolder}/Countinghouse.sln"],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      // dotnet-ef is a local tool pinned in dotnet-tools.json; run this once per clone.
+      "label": "tool-restore",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["tool", "restore"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always" }
+    },
+    {
+      // No --startup-project any more. A WPF app gives the tooling no host to discover, so
+      // Domain carries DesignTimeDbContextFactory and is the only project ef needs.
+      "label": "ef: migrations add",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "ef", "migrations", "add", "${input:migrationName}",
+        "--project", "src/Countinghouse.Domain"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      // App.xaml.cs already calls Database.Migrate() on startup, so this is mostly for
+      // applying a migration without running the app.
+      "label": "ef: database update",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "ef", "database", "update",
+        "--project", "src/Countinghouse.Domain"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "ef: migrations list",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "ef", "migrations", "list",
+        "--project", "src/Countinghouse.Domain"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

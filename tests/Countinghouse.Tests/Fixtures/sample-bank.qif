@@ -1,0 +1,102 @@
+!Type:Tag
+NVacation 2019
+DA tag, not a category
+^
+NSummer Trip
+^
+!Type:Cat
+NSalary
+DGross pay
+T
+R460
+I
+^
+NAuto
+DAuto expenses
+E
+^
+NAuto:Fuel
+DAuto Fuel
+B-26.00
+T
+R820
+^
+NAuto:Repairs
+^
+NBank Charge
+E
+^
+NInterest Inc
+I
+^
+NUnused Income Cat
+I
+^
+!Type:Bank
+D1/ 2'13
+U1,700.00
+T1,700.00
+CX
+POpening Balance
+L[Sample Checking]
+^
+D1/15'13
+U-42.50
+T-42.50
+CX
+PInvented Fuel Stop
+MRegular unleaded
+LAuto:Fuel
+^
+D2/ 3'13
+U-1,250.00
+T-1,250.00
+C*
+PInvented Contractor
+LAuto/Summer Trip
+^
+D3/ 1'19
+U0.37
+T0.37
+C
+PInvented Bank
+LInterest Inc
+^
+D4/19'13
+U1,150.00
+T1,150.00
+CX
+PInvented Employer
+MSemi-monthly
+L--Split--
+SSalary
+EGross pay
+$3,500.00
+SAuto:Repairs
+EWithheld
+$-350.00
+S
+$-2,000.00
+^
+D5/ 6'14
+U-15.00
+T-15.00
+CX
+PInvented Fee
+^
+D6/ 7'15
+U-80.00
+T-80.00
+CX
+PInvented Transfer Out
+NTXFR
+L[Sample Savings]/Vacation 2019
+^
+D12/31'20
+U250.00
+T250.00
+CR
+PInvented Check Deposit
+N1042
+LSalary
+^

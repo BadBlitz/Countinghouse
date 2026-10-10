@@ -1,0 +1,196 @@
+@page "/settings/setup-accounts"
+@inject AccountSetupService AccountSetupService
+
+<PageTitle>Set Up Accounts - Countinghouse</PageTitle>
+
+<h1>Set up accounts</h1>
+<p>
+    Creates the accounts listed in your account plan, in one pass instead of a trip
+    through the account form for each. Safe to run more than once — accounts that already exist are left
+    completely untouched.
+</p>
+
+<div class="alert alert-info">
+    <strong>Why the split.</strong> The <strong>importing</strong> accounts below (@ImportingCount) must open at
+    <code>$0.00</code>, dated the day before their earliest Quicken transaction — their history
+    arrives by QIF import, and <code>CurrentBalance = OpeningBalance + sum(transactions)</code>,
+    so entering today's real balance would give today's balance <em>plus</em> all of history:
+    wrong, and silently so. That's why those rows have no editable balance field.
+    <br />
+    The <strong>snapshot</strong> accounts (@SnapshotCount — typically investments and loans) need today's real
+    balance, which nothing in the exports can supply — investment rows are share movements, not
+    cash flows. Enter what you have; leaving one at <code>0.00</code> is fine, and you can set it
+    later via Edit Account. For a loan, enter what you owe as a <strong>negative</strong>
+    number so net worth adds up.
+</div>
+
+@if (statuses is null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (statuses.Count == 0)
+{
+    @* The plan file is optional and lives outside the repo, so "absent" is a normal first-run
+       state rather than an error — say what to do about it instead of showing an empty table. *@
+    <div class="alert alert-secondary">
+        <p class="mb-2">
+            No account plan found. This page creates a known list of accounts in one pass; without a
+            plan it has nothing to offer, and you can create accounts individually from
+            <a href="accounts">Accounts</a> instead.
+        </p>
+        <p class="mb-0">
+            To use it, copy <code>Docs/accounts.example.json</code> from the repo to
+            <code>@Countinghouse.Domain.AppPaths.AccountPlanPath</code>, edit it, and restart the app.
+        </p>
+    </div>
+}
+else
+{
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr>
+                <th>Account</th>
+                <th>Type</th>
+                <th>Opening date</th>
+                <th>Opening balance</th>
+                <th>Notes</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (var i = 0; i < statuses.Count; i++)
+            {
+                var status = statuses[i];
+                var planned = status.Planned;
+                var startsNewGroup = i == 0 || statuses[i - 1].Planned.ImportsHistory != planned.ImportsHistory;
+                if (startsNewGroup)
+                {
+                    <tr class="table-secondary">
+                        <td colspan="6">
+                            <strong>
+                                @(planned.ImportsHistory
+                                    ? "Importing — opens at $0.00, history via QIF"
+                                    : "Snapshot — enter today's balance")
+                            </strong>
+                        </td>
+                    </tr>
+                }
+                <tr>
+                    <td>@planned.Name</td>
+                    <td>@TypeLabel(planned.AccountType)</td>
+                    <td>@(planned.OpeningBalanceDate?.ToString("M/d/yyyy") ?? "today")</td>
+                    <td>
+                        @if (planned.ImportsHistory)
+                        {
+                            <span class="text-muted"
+                                  title="Fixed at $0.00 on purpose — history arrives via QIF import, and CurrentBalance = OpeningBalance + sum(transactions). A real balance here would double-count.">
+                                $0.00
+                            </span>
+                        }
+                        else if (status.Exists)
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                        else
+                        {
+                            <input type="number" step="0.01" class="form-control form-control-sm"
+                                   @bind="snapshotBalances[planned.Name]" />
+                        }
+                    </td>
+                    <td class="text-muted">@planned.Notes</td>
+                    <td>
+                        @if (status.Exists)
+                        {
+                            <span class="badge bg-secondary">exists</span>
+                            <a href="accounts/@status.ExistingAccountId">view</a>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success">will create</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (MissingCount == 0)
+    {
+        <p class="text-muted">Every account in the plan already exists.</p>
+    }
+    else
+    {
+        <button class="btn btn-primary" disabled="@busy" @onclick="CreateMissingAsync">
+            @if (busy)
+            {
+                <span class="spinner-border spinner-border-sm" role="status"></span>
+                <span> Creating...</span>
+            }
+            else
+            {
+                <span>Create @MissingCount missing account(s)</span>
+            }
+        </button>
+    }
+
+    @if (result is not null)
+    {
+        <div class="alert alert-success mt-3">
+            Created @result.Created.ToString("N0") account(s), skipped @result.Skipped.ToString("N0")
+            that already existed.
+            <br />
+            Next: head to the <a href="/">Dashboard</a> — the importing accounts are ready for
+            their QIF files via each register's "Import History" button.
+        </div>
+    }
+}
+
+@code {
+    private List<PlannedAccountStatus>? statuses;
+    private readonly Dictionary<string, decimal> snapshotBalances = new();
+    private bool busy;
+    private AccountSetupResult? result;
+
+    private int MissingCount => statuses?.Count(s => !s.Exists) ?? 0;
+    private int ImportingCount => statuses?.Count(s => !s.Planned.NeedsBalance) ?? 0;
+    private int SnapshotCount => statuses?.Count(s => s.Planned.NeedsBalance) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshStatusesAsync();
+    }
+
+    private async Task RefreshStatusesAsync()
+    {
+        statuses = await AccountSetupService.GetStatusAsync();
+
+        // Pre-seed every editable row so the @bind indexer below never hits a missing key —
+        // the input's getter runs before the user has typed anything.
+        foreach (var status in statuses.Where(s => s.Planned.NeedsBalance && !s.Exists))
+            snapshotBalances.TryAdd(status.Planned.Name, 0m);
+    }
+
+    private async Task CreateMissingAsync()
+    {
+        result = null;
+        await SetBusyAsync(() => busy = true);
+        result = await AccountSetupService.CreateMissingAsync(snapshotBalances);
+        busy = false;
+        await RefreshStatusesAsync();
+    }
+
+    // Blazor only re-renders after a handler returns, so a busy flag set inline never reaches
+    // the browser. Yielding once lets the spinner paint before the creation work starts.
+    private async Task SetBusyAsync(Action setFlag)
+    {
+        setFlag();
+        StateHasChanged();
+        await Task.Yield();
+    }
+
+    private static string TypeLabel(AccountType type) => type switch
+    {
+        AccountType.CreditCard => "Credit Card",
+        _ => type.ToString(),
+    };
+}

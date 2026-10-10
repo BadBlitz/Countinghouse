@@ -1,0 +1,39 @@
+@* One rendering of a feed's health, shared by the dashboard, the register and the expectations
+   page so the three can't drift into describing the same state three different ways. *@
+
+@if (Health is null || !Health.Applies)
+{
+    <span class="text-muted">—</span>
+}
+else if (Health.Status == FeedHealthStatus.SyncFailing)
+{
+    <a href="settings/simplefin" class="badge text-bg-danger text-decoration-none" title="@Health.Note">
+        Sync failing
+    </a>
+}
+else if (Health.Status == FeedHealthStatus.Stale && Health.Kind == FeedStaleKind.BalanceNotAdvancing)
+{
+    <a href="settings/simplefin" class="badge text-bg-danger text-decoration-none" title="@Health.Note">
+        Frozen @Health.DaysBehind days
+    </a>
+}
+else if (Health.Status == FeedHealthStatus.Stale)
+{
+    <a href="settings/feed-expectations" class="badge text-bg-warning text-decoration-none" title="@Health.Note">
+        No movement in @Health.DaysWithoutMovement days
+    </a>
+}
+else if (Health.Status == FeedHealthStatus.Unknown)
+{
+    <span class="badge text-bg-light text-muted" title="@Health.Note">Not known yet</span>
+}
+else
+{
+    <span class="badge text-bg-success" title="The feed is current and moving as expected.">
+        &#x2713; Live
+    </span>
+}
+
+@code {
+    [Parameter] public AccountFeedHealth? Health { get; set; }
+}

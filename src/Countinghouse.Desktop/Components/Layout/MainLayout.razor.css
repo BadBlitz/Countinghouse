@@ -1,0 +1,46 @@
+.page {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    flex: 0 0 232px;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    background: var(--paper-deep);
+    border-right: 1px solid var(--rule);
+}
+
+.content {
+    flex: 1;
+    min-width: 0;
+    max-width: 1180px;
+    padding: 2.25rem 3rem 3rem;
+}
+
+#blazor-error-ui {
+    color-scheme: light only;
+    background: var(--amber-wash);
+    color: var(--amber);
+    border-top: 1px solid #EED49A;
+    bottom: 0;
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        background: none;
+        border: 0;
+        color: inherit;
+        font-size: 1.25rem;
+        line-height: 1;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.45rem;
+    }

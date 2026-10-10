@@ -1,0 +1,210 @@
+@page "/reports/spending"
+@inject ReportService ReportService
+@inject AccountService AccountService
+
+<PageTitle>Spending by Category - Countinghouse</PageTitle>
+
+<h1>Spending by category</h1>
+
+<div class="row g-2 align-items-end mb-3">
+    <div class="col-auto">
+        <label class="form-label mb-0 small">From</label>
+        <input type="date" class="form-control form-control-sm" @bind="from" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label mb-0 small">To</label>
+        <input type="date" class="form-control form-control-sm" @bind="to" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label mb-0 small">Account</label>
+        <select class="form-select form-select-sm" @bind="accountId">
+            <option value="0">All accounts</option>
+            @foreach (var account in accounts ?? [])
+            {
+                <option value="@account.Id">@account.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-sm btn-primary" @onclick="RunAsync" disabled="@running">Run</button>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => SetRangeAsync(12)">Last 12 months</button>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => SetRangeAsync(1)">Last month</button>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger py-1">@error</div>
+}
+
+@if (report is null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (report.IsEmpty)
+{
+    <p class="text-muted">No transactions in that period.</p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-bg-light">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-muted mb-1">Spent</h6>
+                    <h4 class="card-title mb-0">@report.TotalSpent.ToString("C2")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-bg-light">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-muted mb-1">Received</h6>
+                    <h4 class="card-title mb-0">@report.TotalIncome.ToString("C2")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-bg-light">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-muted mb-1">Net</h6>
+                    <h4 class="card-title mb-0 @(report.Net < 0 ? "text-danger" : "")">@report.Net.ToString("C2")</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <p class="text-muted small">
+        @report.TransactionCount transaction(s) from @report.From.ToString("yyyy-MM-dd")
+        to @report.To.ToString("yyyy-MM-dd"). Transfers are excluded.
+    </p>
+
+    @if (report.Spending.Count > 0)
+    {
+        <h5>Spending</h5>
+        <table class="table table-sm table-hover align-middle" style="max-width: 50rem;">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th class="text-end" style="width: 8rem;">Amount</th>
+                    <th class="text-end" style="width: 6rem;">Share</th>
+                    <th class="text-end" style="width: 5rem;">Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in report.Spending)
+                {
+                    <tr>
+                        <td>
+                            @if (row.CategoryName == ReportService.UncategorizedName)
+                            {
+                                <a href="transactions/uncategorized">@row.CategoryName</a>
+                            }
+                            else
+                            {
+                                @row.CategoryName
+                            }
+                        </td>
+                        <td class="text-end">@row.Outflow.ToString("C2")</td>
+                        <td class="text-end text-muted">@ShareOf(row).ToString("P1")</td>
+                        <td class="text-end text-muted">@row.TransactionCount</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr class="fw-semibold">
+                    <td>Total</td>
+                    <td class="text-end">@report.TotalSpent.ToString("C2")</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    }
+
+    @if (report.Income.Count > 0)
+    {
+        <h5>Received</h5>
+        <table class="table table-sm table-hover align-middle" style="max-width: 50rem;">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th class="text-end" style="width: 8rem;">Amount</th>
+                    <th class="text-end" style="width: 5rem;">Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in report.Income)
+                {
+                    <tr>
+                        <td>
+                            @if (row.CategoryName == ReportService.UncategorizedName)
+                            {
+                                <a href="transactions/uncategorized">@row.CategoryName</a>
+                            }
+                            else
+                            {
+                                @row.CategoryName
+                            }
+                        </td>
+                        <td class="text-end">@row.Total.ToString("C2")</td>
+                        <td class="text-end text-muted">@row.TransactionCount</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private List<Account>? accounts;
+    private SpendingReport? report;
+    private string? error;
+    private bool running;
+
+    private DateOnly from = DateOnly.FromDateTime(DateTime.Today).AddMonths(-12);
+    private DateOnly to = DateOnly.FromDateTime(DateTime.Today);
+    private int accountId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        accounts = await AccountService.GetAccountsAsync(includeClosed: true);
+        await RunAsync();
+    }
+
+    private async Task SetRangeAsync(int months)
+    {
+        to = DateOnly.FromDateTime(DateTime.Today);
+        from = to.AddMonths(-months);
+        await RunAsync();
+    }
+
+    private async Task RunAsync()
+    {
+        error = null;
+        if (to < from)
+        {
+            error = "The end date is before the start date.";
+            return;
+        }
+
+        running = true;
+        try
+        {
+            // 0 is the "all accounts" sentinel the select binds to; the service treats an empty
+            // collection the same way, so pass null rather than a list containing 0.
+            var ids = accountId == 0 ? null : new[] { accountId };
+            report = await ReportService.GetSpendingByCategoryAsync(from, to, ids);
+        }
+        finally
+        {
+            running = false;
+        }
+    }
+
+    // Share of the period's total outflow, so the biggest line items are obvious at a glance.
+    private decimal ShareOf(CategorySpending row) =>
+        report is null || report.TotalSpent == 0m ? 0m : row.Outflow / report.TotalSpent;
+}

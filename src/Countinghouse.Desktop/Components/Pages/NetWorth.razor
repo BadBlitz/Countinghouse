@@ -1,0 +1,210 @@
+@page "/reports/net-worth"
+@inject ReportService ReportService
+
+<PageTitle>Net Worth - Countinghouse</PageTitle>
+
+<h1>Net worth</h1>
+
+@if (report is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (report.IsEmpty)
+{
+    <p class="text-muted">No balance snapshots yet. One is recorded whenever a balance changes and each time the app starts.</p>
+}
+else
+{
+    <p class="text-muted small">
+        Each month uses every account's last recorded balance on or before the month's end, and the
+        current month is as of today. Balances are recorded only when they change or the app starts,
+        so this is one reading per month, not a daily series.
+    </p>
+
+    @if (report.Months.Count >= 2)
+    {
+        <figure class="chart" aria-label="Net worth by month">
+            <svg viewBox="0 0 @Width @Height" role="img" @onmouseleave="() => hovered = null">
+                @foreach (var tick in ticks)
+                {
+                    var y = Y(tick);
+                    <g>
+                        <line class="@(tick == 0m ? "zero" : "grid")" x1="@Left" x2="@(Width - Right)" y1="@F(y)" y2="@F(y)" />
+                        <text class="axis" x="@(Left - 8)" y="@F(y + 4)" text-anchor="end">@Compact(tick)</text>
+                    </g>
+                }
+
+                @for (var i = 0; i < report.Months.Count; i++)
+                {
+                    if (ShowLabel(i))
+                    {
+                        <g><text class="axis" x="@F(X(i))" y="@(Height - 8)" text-anchor="middle">@ShortLabel(i)</text></g>
+                    }
+                }
+
+                @if (hovered is int h)
+                {
+                    <line class="crosshair" x1="@F(X(h))" x2="@F(X(h))" y1="@Top" y2="@(Height - Bottom)" />
+                }
+
+                <polyline class="series" points="@Points()" />
+
+                @for (var i = 0; i < report.Months.Count; i++)
+                {
+                    var month = report.Months[i];
+                    <circle class="marker @(month.NetWorth < 0 ? "negative" : "")" cx="@F(X(i))" cy="@F(Y(month.NetWorth))" r="@(hovered == i ? 5 : 4)" />
+                }
+
+                @for (var i = 0; i < report.Months.Count; i++)
+                {
+                    var index = i;
+                    <rect class="hit" x="@F(X(i) - Band / 2)" y="@Top" width="@F(Band)" height="@(Height - Top - Bottom)"
+                          @onmouseenter="() => hovered = index" />
+                }
+            </svg>
+
+            @if (hovered is int t)
+            {
+                var month = report.Months[t];
+                <div class="chart-tip" style="left: @F(X(t) / Width * 100)%">
+                    <div class="tip-label">@LongLabel(t)</div>
+                    <div class="tip-value @(month.NetWorth < 0 ? "text-danger" : "")">@month.NetWorth.ToString("C0")</div>
+                </div>
+            }
+        </figure>
+    }
+
+    <table class="table table-sm align-middle money-table">
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th class="text-end">Assets</th>
+                <th class="text-end">Liabilities</th>
+                <th class="text-end">Net worth</th>
+                <th class="text-end">Change</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (var i = report.Months.Count - 1; i >= 0; i--)
+            {
+                var month = report.Months[i];
+                decimal? change = i > 0 ? month.NetWorth - report.Months[i - 1].NetWorth : null;
+                <tr>
+                    <td>
+                        @LongLabel(i)
+                        @if (month.CarriedForwardCount > 0)
+                        {
+                            <div class="text-muted small" title="No balance was recorded for these accounts during the month, so their last earlier balance is used.">
+                                @month.CarriedForwardCount of @month.AccountCount accounts carried forward
+                            </div>
+                        }
+                    </td>
+                    <td class="text-end">@month.Assets.ToString("C2")</td>
+                    <td class="text-end @(month.Liabilities < 0 ? "text-danger" : "")">@month.Liabilities.ToString("C2")</td>
+                    <td class="text-end fw-semibold @(month.NetWorth < 0 ? "text-danger" : "")">@month.NetWorth.ToString("C2")</td>
+                    <td class="text-end @(change < 0 ? "text-danger" : "")">@Signed(change)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private const double Width = 720, Height = 260, Left = 84, Right = 24, Top = 16, Bottom = 32;
+
+    private NetWorthReport? report;
+    private List<decimal> ticks = [];
+    private decimal low, high;
+    private int? hovered;
+
+    protected override async Task OnInitializedAsync()
+    {
+        report = await ReportService.GetNetWorthByMonthAsync();
+        if (report.Months.Count >= 2)
+            BuildScale(report.Months.Select(m => m.NetWorth).ToList());
+    }
+
+    // Round tick steps (1, 2 or 5 times a power of ten). Zero appears only when the series is near
+    // it: forcing a zero baseline on a line chart flattens a large balance's month-to-month
+    // movement into a straight line.
+    private void BuildScale(List<decimal> values)
+    {
+        var min = values.Min();
+        var max = values.Max();
+        if (min == max)
+        {
+            var pad = Math.Max(Math.Abs(min) * 0.05m, 100m);
+            min -= pad;
+            max += pad;
+        }
+
+        var raw = (double)(max - min) / 4;
+        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        var step = (decimal)(new[] { 1d, 2d, 5d, 10d }.First(m => m * magnitude >= raw) * magnitude);
+
+        low = Math.Floor(min / step) * step;
+        high = Math.Ceiling(max / step) * step;
+        ticks = [];
+        for (var v = low; v <= high; v += step)
+            ticks.Add(v);
+    }
+
+    private double Band => (Width - Left - Right) / Math.Max(report!.Months.Count - 1, 1);
+
+    private double X(int i) => Left + i * Band;
+
+    private double Y(decimal value) =>
+        Top + (double)((high - value) / (high - low)) * (Height - Top - Bottom);
+
+    private string Points() =>
+        string.Join(" ", report!.Months.Select((m, i) => $"{F(X(i))},{F(Y(m.NetWorth))}"));
+
+    // Month labels thin out so a "Jan 2026"-width label always has room. The newest month is
+    // always labelled, and the rest are counted back from it.
+    private const double LabelWidth = 72;
+
+    private int LabelEvery => (int)Math.Ceiling(LabelWidth / Band);
+
+    private bool ShowLabel(int i) => (report!.Months.Count - 1 - i) % LabelEvery == 0;
+
+    // Only the last month can be partial; its MonthEnd is today rather than a month end.
+    private bool IsPartial(int i)
+    {
+        var end = report!.Months[i].MonthEnd;
+        return i == report.Months.Count - 1 && end.AddDays(1).Month == end.Month;
+    }
+
+    // The year appears on the first visible label and wherever it changes from the previous one.
+    private string ShortLabel(int i)
+    {
+        var end = report!.Months[i].MonthEnd;
+        var previous = i - LabelEvery;
+        return previous < 0 || report.Months[previous].MonthEnd.Year != end.Year
+            ? end.ToString("MMM yyyy")
+            : end.ToString("MMM");
+    }
+
+    private string LongLabel(int i)
+    {
+        var end = report!.Months[i].MonthEnd;
+        return IsPartial(i) ? $"{end:MMMM yyyy} (to {end:MMM d})" : end.ToString("MMMM yyyy");
+    }
+
+    private static string Signed(decimal? value) =>
+        value is null ? "" : value.Value.ToString("+$#,##0.00;-$#,##0.00;$0.00");
+
+    // Tick labels are abbreviated only as far as the tick step allows, so neighbouring ticks never
+    // round to the same label: a range of a few thousand near a million stays in whole dollars.
+    private string Compact(decimal value)
+    {
+        var step = ticks.Count > 1 ? ticks[1] - ticks[0] : 1m;
+        var (unit, suffix) = step >= 100_000m ? (1_000_000m, "M") : step >= 10_000m ? (1_000m, "k") : (1m, "");
+        var decimals = Math.Max(0, -(int)Math.Floor(Math.Log10((double)(step / unit))));
+        var sign = value < 0 ? "-" : "";
+        var scaled = Math.Abs(value) / unit;
+        return $"{sign}${scaled.ToString("N" + decimals)}{suffix}";
+    }
+
+    private static string F(double value) =>
+        value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}

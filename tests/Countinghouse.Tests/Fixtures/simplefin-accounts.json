@@ -1,0 +1,60 @@
+{
+  "errors": [
+    "Connection to Example Credit Union failed. Please re-authenticate."
+  ],
+  "accounts": [
+    {
+      "org": {
+        "domain": "examplebank.com",
+        "name": "Example Bank",
+        "sfin-url": "https://beta-bridge.simplefin.org/simplefin",
+        "id": "org-example-bank"
+      },
+      "id": "ACT-checking-0001",
+      "name": "Everyday Checking",
+      "currency": "USD",
+      "balance": "1284.37",
+      "available-balance": "1234.37",
+      "balance-date": 1786536000,
+      "transactions": [
+        {
+          "id": "TXN-0001",
+          "posted": 1786363200,
+          "amount": "-52.18",
+          "description": "SAMPLE GROCERY 1234",
+          "payee": "Sample Grocery",
+          "memo": "card ending 0000",
+          "transacted_at": 1786276800,
+          "pending": false
+        },
+        {
+          "id": "TXN-0002",
+          "posted": 1786449600,
+          "amount": "1500.00",
+          "description": "SAMPLE DIRECT DEPOSIT",
+          "pending": false
+        },
+        {
+          "id": "TXN-0003",
+          "posted": 1786536000,
+          "amount": "-19.99",
+          "description": "SAMPLE PENDING CHARGE",
+          "pending": true
+        }
+      ]
+    },
+    {
+      "org": {
+        "domain": "examplecard.com",
+        "sfin-url": "https://beta-bridge.simplefin.org/simplefin"
+      },
+      "id": "ACT-card-0002",
+      "name": "Rewards Card",
+      "currency": "USD",
+      "balance": -430.5,
+      "available-balance": null,
+      "balance-date": 1786536000,
+      "transactions": []
+    }
+  ]
+}

@@ -1,0 +1,344 @@
+@page "/accounts/{Id:int}/import-history"
+@using Countinghouse.Domain.Qif
+@inject AccountService AccountService
+@inject QifImportService QifImportService
+
+<PageTitle>Import History - @(account?.Name ?? "Account") - Countinghouse</PageTitle>
+
+@if (loadFailed)
+{
+    <div class="alert alert-danger">Account not found.</div>
+}
+else if (account is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="d-flex align-items-baseline gap-3 flex-wrap">
+        <h1 class="mb-0">Import history</h1>
+        <span class="text-muted">@account.Name</span>
+        <h5 class="mb-0 @(account.CurrentBalance < 0 ? "text-danger" : "")">@account.CurrentBalance.ToString("C2")</h5>
+    </div>
+    <div class="my-2">
+        <a class="btn btn-sm btn-outline-secondary" href="accounts/@Id">Back to Register</a>
+    </div>
+
+    <div class="alert alert-warning">
+        <strong>One-time import, not a sync.</strong> QIF rows carry no stable id, so importing the
+        same file twice duplicates every row — there's no way to detect "already imported" the way
+        SimpleFIN does with its external ids. The right order is: import history here first, then
+        connect SimpleFIN and let it sync starting the day after the last transaction in this file.
+        Importing overlapping date ranges from both sources will duplicate transactions.
+    </div>
+
+    <div class="card my-3" style="max-width: 40rem;">
+        <div class="card-body">
+            <h6 class="card-title">1. Choose a QIF file</h6>
+            <InputFile OnChange="OnFileSelectedAsync" accept=".qif,.QIF" class="form-control form-control-sm" />
+            @if (fileName is not null)
+            {
+                <div class="form-text">@fileName (@FormatSize(fileSize))</div>
+            }
+            <div class="form-check mt-2">
+                <input type="checkbox" class="form-check-input" id="createAllCats" @bind="createAllCategories" />
+                <label class="form-check-label small" for="createAllCats">
+                    Create all categories from the file's category list, with correct Income/Expense
+                    types (the file's <code>!Type:Cat</code> block is the only reliable source of
+                    that). Unchecked creates only the categories transactions actually reference,
+                    which keeps the category picker shorter.
+                </label>
+            </div>
+        </div>
+    </div>
+
+    @if (previewError is not null)
+    {
+        <div class="alert alert-danger">@previewError</div>
+    }
+
+    @if (previewBusy)
+    {
+        <p><em>Reading file...</em></p>
+    }
+
+    @* Outcomes live outside the preview and danger-zone cards on purpose: both of those
+       disappear once their counts change, which would take the confirmation with them. *@
+    @if (importError is not null)
+    {
+        <div class="alert alert-danger">@importError</div>
+    }
+    @if (importResult is not null)
+    {
+        <div class="alert alert-success">
+            Imported @importResult.Inserted.ToString("N0") transaction(s),
+            created @importResult.CategoriesCreated.ToString("N0") category(ies).
+            New balance: @importResult.NewBalance.ToString("C2").
+            <a href="accounts/@Id">View register</a>.
+        </div>
+    }
+    @if (clearedMessage is not null)
+    {
+        <div class="alert alert-success">@clearedMessage</div>
+    }
+
+    @if (preview is not null)
+    {
+        <div class="card my-3">
+            <div class="card-body">
+                <h6 class="card-title">2. Preview</h6>
+                <div class="row">
+                    <dl class="row col-md-6 mb-0">
+                        <dt class="col-7">Transactions</dt><dd class="col-5">@preview.TransactionCount.ToString("N0")</dd>
+                        <dt class="col-7">Date range</dt>
+                        <dd class="col-5">
+                            @(preview.FirstDate?.ToString("M/d/yyyy")) &ndash; @(preview.LastDate?.ToString("M/d/yyyy"))
+                        </dd>
+                        <dt class="col-7">Amount total</dt><dd class="col-5">@preview.AmountTotal.ToString("C2")</dd>
+                        <dt class="col-7">Projected balance after import</dt>
+                        <dd class="col-5">@preview.ProjectedBalance.ToString("C2")</dd>
+                        <dt class="col-7">Uncleared / cleared / reconciled</dt>
+                        <dd class="col-5">@preview.UnclearedCount.ToString("N0") / @preview.ClearedCount.ToString("N0") / @preview.ReconciledCount.ToString("N0")</dd>
+                        <dt class="col-7">Uncategorized</dt><dd class="col-5">@preview.UncategorizedCount.ToString("N0")</dd>
+                        <dt class="col-7">Transfers</dt><dd class="col-5">@preview.TransferCount.ToString("N0")</dd>
+                        <dt class="col-7">Split transactions</dt><dd class="col-5">@preview.SplitTransactionCount.ToString("N0")</dd>
+                        <dt class="col-7">Skipped split lines</dt><dd class="col-5">@preview.SkippedSplitLines.ToString("N0")</dd>
+                    </dl>
+                    <dl class="row col-md-6 mb-0">
+                        <dt class="col-7">
+                            Category from dominant split
+                            <span class="text-muted" title="Quicken writes --Split-- in place of a category on split rows, so those rows take the category of their largest split line; balances are unaffected.">(?)</span>
+                        </dt>
+                        <dd class="col-5">@preview.DominantSplitCategoryCount.ToString("N0")</dd>
+                        <dt class="col-7">Categories in file</dt><dd class="col-5">@preview.CategoriesInFile.ToString("N0")</dd>
+                        <dt class="col-7">New categories (@(createAllCategories ? "all from file" : "referenced only"))</dt>
+                        <dd class="col-5">@((createAllCategories ? preview.NewCategoriesFromFile : preview.NewCategoriesReferenced).ToString("N0"))</dd>
+                        <dt class="col-7">Existing transactions in account</dt><dd class="col-5">@preview.ExistingTransactionCount.ToString("N0")</dd>
+                        <dt class="col-7">Existing, previously imported</dt><dd class="col-5">@preview.ExistingImportedCount.ToString("N0")</dd>
+                        <dt class="col-7">Account headers detected</dt>
+                        <dd class="col-5">@string.Join(", ", preview.AccountHeaders)</dd>
+                    </dl>
+                </div>
+
+                @foreach (var warning in preview.Warnings)
+                {
+                    <div class="alert alert-warning py-1 mb-1">@warning</div>
+                }
+
+                <div class="row mt-2">
+                    <div class="col-md-6">
+                        <h6>First rows</h6>
+                        @SampleTable(preview.FirstRows)
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Last rows</h6>
+                        @SampleTable(preview.LastRows)
+                    </div>
+                </div>
+
+                <h6 class="mt-3">3. Commit</h6>
+                <button class="btn btn-primary" disabled="@importBusy" @onclick="ImportAsync">
+                    @if (importBusy)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                        <span> Importing...</span>
+                    }
+                    else
+                    {
+                        <span>Import @preview.TransactionCount.ToString("N0") transactions</span>
+                    }
+                </button>
+            </div>
+        </div>
+    }
+
+    @if (summary is { ImportedRowCount: > 0 })
+    {
+        <div class="card my-3 border-danger">
+            <div class="card-body">
+                <h6 class="card-title text-danger">Danger zone</h6>
+                <p class="mb-2">
+                    This account has @summary.ImportedRowCount.ToString("N0") imported transaction(s)
+                    across @summary.BatchCount.ToString("N0") import batch(es), plus
+                    @summary.ManualRowCount.ToString("N0") hand-entered transaction(s)/adjustments.
+                    Clearing removes only the QIF-imported rows — hand-entered transactions and
+                    balance adjustments are left alone.
+                </p>
+                @if (clearArmed)
+                {
+                    <button class="btn btn-danger" @onclick="ClearImportedAsync">
+                        Confirm: delete @summary.ImportedRowCount.ToString("N0") imported transaction(s)
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="() => clearArmed = false">Cancel</button>
+                }
+                else
+                {
+                    <button class="btn btn-outline-danger" @onclick="() => clearArmed = true">
+                        Clear imported transactions
+                    </button>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Account? account;
+    private QifImportSummary? summary;
+    private bool loadFailed;
+
+    private string? fileName;
+    private long fileSize;
+    private string? qifText;
+    private bool createAllCategories = true;
+
+    private bool previewBusy;
+    private QifImportPreview? preview;
+    private string? previewError;
+
+    private bool importBusy;
+    private QifImportResult? importResult;
+    private string? importError;
+
+    private bool clearArmed;
+    private string? clearedMessage;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        account = await AccountService.GetAccountAsync(Id);
+        loadFailed = account is null;
+        if (account is null)
+            return;
+        summary = await QifImportService.GetImportSummaryAsync(Id);
+    }
+
+    private async Task OnFileSelectedAsync(InputFileChangeEventArgs e)
+    {
+        preview = null;
+        previewError = null;
+        importResult = null;
+        importError = null;
+        clearedMessage = null;
+
+        var file = e.File;
+        await SetBusyAsync(() => previewBusy = true);
+        try
+        {
+            await using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            qifText = await reader.ReadToEndAsync();
+            fileName = file.Name;
+            fileSize = file.Size;
+        }
+        catch (Exception ex)
+        {
+            qifText = null;
+            fileName = null;
+            previewBusy = false;
+            previewError = $"Couldn't read the file: {ex.Message}";
+            return;
+        }
+
+        (preview, previewError) = await QifImportService.PreviewAsync(Id, qifText);
+        previewBusy = false;
+    }
+
+    private async Task ImportAsync()
+    {
+        if (qifText is null)
+            return;
+
+        importError = null;
+        importResult = null;
+        await SetBusyAsync(() => importBusy = true);
+        (importResult, importError) = await QifImportService.ImportAsync(
+            Id, qifText, new QifImportOptions(createAllCategories));
+        importBusy = false;
+
+        if (importResult is not null)
+        {
+            // Drop the preview and the uploaded text so the commit button can't be clicked a
+            // second time — a re-import of the same file would silently duplicate every row.
+            preview = null;
+            qifText = null;
+            fileName = null;
+            account = await AccountService.GetAccountAsync(Id);
+            summary = await QifImportService.GetImportSummaryAsync(Id);
+        }
+    }
+
+    // Blazor only re-renders after a handler returns, so a busy flag set inline never reaches
+    // the browser. Yielding once lets the spinner paint before the slow work starts — an
+    // 8,000-row import is several seconds of silence otherwise.
+    private async Task SetBusyAsync(Action setFlag)
+    {
+        setFlag();
+        StateHasChanged();
+        await Task.Yield();
+    }
+
+    private async Task ClearImportedAsync()
+    {
+        var deleted = await QifImportService.ClearImportedAsync(Id);
+        clearArmed = false;
+        clearedMessage = $"Deleted {deleted:N0} imported transaction(s).";
+
+        // Prior preview/import state referred to counts that no longer hold.
+        preview = null;
+        importResult = null;
+        qifText = null;
+        fileName = null;
+
+        account = await AccountService.GetAccountAsync(Id);
+        summary = await QifImportService.GetImportSummaryAsync(Id);
+    }
+
+    // Razor template syntax (@<tag>) assigned to a RenderFragment<T> — the one legal way to
+    // reuse a chunk of markup twice from @code without duplicating the table by hand.
+    private static readonly RenderFragment<List<QifTransactionRecord>> SampleTable = rows =>
+        @<table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Payee</th>
+                    <th>Chk #</th>
+                    <th>Category</th>
+                    <th>Memo</th>
+                    <th>Clr</th>
+                    <th class="text-end">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in rows)
+                {
+                    <tr>
+                        <td>@row.PostedDate.ToString("M/d/yyyy")</td>
+                        <td>@row.Payee</td>
+                        <td>@row.CheckNumber</td>
+                        <td>
+                            @row.Category?.Path
+                            @if (row.Category?.IsTransfer == true)
+                            {
+                                <span class="badge bg-secondary">transfer</span>
+                            }
+                        </td>
+                        <td class="text-muted">@row.Memo</td>
+                        <td>@ClearedLabel(row.ClearedStatus)</td>
+                        <td class="text-end @(row.Amount < 0 ? "text-danger" : "")">@row.Amount.ToString("C2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>;
+
+    private static string FormatSize(long bytes) =>
+        bytes < 1024 * 1024 ? $"{bytes / 1024.0:N0} KB" : $"{bytes / (1024.0 * 1024):N1} MB";
+
+    private static string ClearedLabel(ClearedStatus status) => status switch
+    {
+        ClearedStatus.Cleared => "c",
+        ClearedStatus.Reconciled => "R",
+        _ => "",
+    };
+}

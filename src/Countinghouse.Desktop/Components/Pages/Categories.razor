@@ -1,0 +1,168 @@
+@page "/settings/categories"
+@inject CategoryService CategoryService
+
+<PageTitle>Categories - Countinghouse</PageTitle>
+
+<h1>Categories</h1>
+
+<div class="row g-2 align-items-end mb-3">
+    <div class="col-auto">
+        <label class="form-label mb-0 small">Name</label>
+        <input class="form-control form-control-sm" @bind="newName" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label mb-0 small">Type</label>
+        <select class="form-select form-select-sm" @bind="newType">
+            <option value="@CategoryType.Expense">Expense</option>
+            <option value="@CategoryType.Income">Income</option>
+            <option value="@CategoryType.Transfer">Transfer</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label mb-0 small">Parent (optional)</label>
+        <select class="form-select form-select-sm" @bind="newParentId">
+            <option value="">(top level)</option>
+            @foreach (var category in TopLevel)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-sm btn-primary" @onclick="AddAsync">Add</button>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger py-1">@error</div>
+}
+
+@if (categories is null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (categories.Count == 0)
+{
+    <p class="text-muted">No categories yet.</p>
+}
+else
+{
+    <table class="table table-sm table-hover align-middle" style="max-width: 45rem;">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th style="width: 8rem;">Type</th>
+                <th style="width: 9rem;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var category in categories)
+            {
+                @if (editModel is not null && editModel.Id == category.Id)
+                {
+                    <tr>
+                        <td class="@(category.ParentCategoryId is not null ? "ps-4" : "")">
+                            <input class="form-control form-control-sm" @bind="editModel.Name" />
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm" @bind="editModel.CategoryType">
+                                <option value="@CategoryType.Expense">Expense</option>
+                                <option value="@CategoryType.Income">Income</option>
+                                <option value="@CategoryType.Transfer">Transfer</option>
+                            </select>
+                        </td>
+                        <td class="text-nowrap">
+                            <button class="btn btn-sm btn-primary" @onclick="SaveEditAsync">Save</button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => editModel = null">Cancel</button>
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td class="@(category.ParentCategoryId is not null ? "ps-4" : "")">@category.Name</td>
+                        <td>@category.CategoryType</td>
+                        <td class="text-nowrap">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => BeginEdit(category)">Edit</button>
+                            @if (deleteConfirmId == category.Id)
+                            {
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(category.Id)">Confirm</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => deleteConfirmId = category.Id">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+    <p class="text-muted small">
+        Deleting a category leaves its transactions uncategorized. Categories with subcategories
+        can't be deleted until the subcategories are removed.
+    </p>
+}
+
+@code {
+    private List<Category>? categories;
+    private Category? editModel;
+    private int? deleteConfirmId;
+    private string newName = "";
+    private CategoryType newType = CategoryType.Expense;
+    private int? newParentId;
+    private string? error;
+
+    private IEnumerable<Category> TopLevel =>
+        categories?.Where(c => c.ParentCategoryId is null) ?? [];
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        categories = await CategoryService.GetCategoriesAsync();
+        editModel = null;
+        deleteConfirmId = null;
+    }
+
+    private async Task AddAsync()
+    {
+        var (created, err) = await CategoryService.CreateAsync(newName, newType, newParentId);
+        error = err;
+        if (created is not null)
+        {
+            newName = "";
+            await RefreshAsync();
+        }
+    }
+
+    private void BeginEdit(Category category)
+    {
+        deleteConfirmId = null;
+        error = null;
+        editModel = new Category
+        {
+            Id = category.Id,
+            Name = category.Name,
+            CategoryType = category.CategoryType,
+            ParentCategoryId = category.ParentCategoryId,
+        };
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (editModel is null)
+            return;
+        error = await CategoryService.UpdateAsync(editModel);
+        if (error is null)
+            await RefreshAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        error = await CategoryService.DeleteAsync(id);
+        if (error is null)
+            await RefreshAsync();
+    }
+}

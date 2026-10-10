@@ -1,0 +1,263 @@
+@page "/settings/rules"
+@inject CategoryRuleService RuleService
+@inject CategoryService CategoryService
+
+<PageTitle>Categorization Rules - Countinghouse</PageTitle>
+
+<h1>Categorization rules</h1>
+
+<p class="text-muted">
+    SimpleFIN doesn't send a category, so synced transactions arrive without one. These rules fill
+    them in as they land. A category you set by hand always wins — a rule only ever fills a blank.
+</p>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger py-2">@error</div>
+}
+@if (notice is not null)
+{
+    <div class="alert alert-success py-2">@notice</div>
+}
+
+<h5 class="mt-4">Add a rule</h5>
+<div class="row g-2 align-items-end mb-3">
+    <div class="col-auto">
+        <label class="form-label mb-0 small">When the payee</label>
+        <select class="form-select form-select-sm" @bind="newMatch">
+            <option value="@CategoryRuleMatch.Contains">contains</option>
+            <option value="@CategoryRuleMatch.Exact">is exactly</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label mb-0 small">Pattern</label>
+        <input class="form-control form-control-sm" style="width: 16rem;" @bind="newPattern" placeholder="e.g. Grocerly" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label mb-0 small">Category</label>
+        <select class="form-select form-select-sm" @bind="newCategoryId">
+            <option value="0">-- pick one --</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category.Id">@category.FullName</option>
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-sm btn-primary" @onclick="AddRuleAsync">Add</button>
+    </div>
+</div>
+
+<div class="d-flex align-items-baseline gap-2 mb-3">
+    <button class="btn btn-sm btn-outline-secondary" @onclick="ApplyAllAsync" disabled="@(rules.Count == 0)">
+        Apply rules to existing uncategorized transactions
+    </button>
+    <span class="text-muted small">Safe to re-run; it only fills blanks.</span>
+</div>
+
+<h5 class="mt-4">Rules</h5>
+@if (rules.Count == 0)
+{
+    <p class="text-muted">No rules yet. The suggestions below are drawn from your own history.</p>
+}
+else
+{
+    <table class="table table-sm table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Match</th>
+                <th>Pattern</th>
+                <th>Category</th>
+                <th class="text-end">Times applied</th>
+                <th>Enabled</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var rule in rules)
+            {
+                <tr>
+                    <td class="text-muted">@(rule.MatchType == CategoryRuleMatch.Exact ? "is exactly" : "contains")</td>
+                    <td><code>@rule.Pattern</code></td>
+                    <td>@rule.Category?.FullName</td>
+                    <td class="text-end @(rule.TimesApplied == 0 ? "text-muted" : "")">@rule.TimesApplied</td>
+                    <td>
+                        <input type="checkbox" class="form-check-input" checked="@rule.IsEnabled"
+                               @onchange="e => ToggleAsync(rule, (bool)e.Value!)" />
+                    </td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(rule.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p class="text-muted small">
+        Order isn't editable and doesn't need to be: an exact match beats a "contains" match, and
+        among "contains" rules the longest pattern wins — so <code>Grocerly Fuel</code> takes
+        precedence over <code>Grocerly</code> automatically.
+    </p>
+}
+
+<h5 class="mt-4">Suggestions from your history</h5>
+@if (suggestions is null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (suggestions.Count == 0)
+{
+    <p class="text-muted">
+        Nothing to suggest — every uncategorized payee is either already covered by a rule or has
+        no categorized history to learn from.
+    </p>
+}
+else
+{
+    <p class="text-muted small">
+        Ordered by how many uncategorized transactions each would fix right now. Confidence is how
+        consistently you file that payee under one category over the last
+        @(CategoryRuleService.RecentWindowMonths / 12) years — recent filing predicts the next
+        transaction better than a twenty-year average does. Below
+        @CategoryRuleService.MinRecentRows recent rows it falls back to all of history and says so.
+        Anything well under 100% is a payee you genuinely split across categories; a
+        <span class="text-warning-emphasis fw-semibold">highlighted</span> all-time figure means
+        your recent filing has drifted away from it, which is the clearest sign not to automate it.
+    </p>
+    <table class="table table-sm table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Payee</th>
+                <th>Category</th>
+                <th class="text-end">Would fix</th>
+                <th class="text-end">History</th>
+                <th class="text-end">Confidence</th>
+                <th class="text-end">All-time</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var suggestion in suggestions)
+            {
+                <tr>
+                    <td><code>@suggestion.Payee</code></td>
+                    <td>@suggestion.CategoryFullName</td>
+                    <td class="text-end">@suggestion.WouldCategorize</td>
+                    <td class="text-end @(suggestion.HistoricalCount < LowEvidence ? "text-warning-emphasis fw-semibold" : "text-muted")">
+                        @suggestion.HistoricalCount
+                    </td>
+                    <td class="text-end @(suggestion.Confidence < 0.8 ? "text-warning-emphasis fw-semibold" : "")">
+                        @suggestion.Confidence.ToString("P0")
+                        @if (!suggestion.BasedOnRecent)
+                        {
+                            <span class="text-muted small d-block">all-time</span>
+                        }
+                    </td>
+                    <td class="text-end @(suggestion.DivergesFromHistory ? "text-warning-emphasis fw-semibold" : "text-muted")">
+                        @if (suggestion.BasedOnRecent)
+                        {
+                            @suggestion.AllTimeConfidence.ToString("P0")
+                        }
+                        else
+                        {
+                            <span>—</span>
+                        }
+                    </td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => AcceptAsync(suggestion)">
+                            Add rule
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    // Below this many historical rows, a "confidence" figure is arithmetic rather than evidence:
+    // one transaction files at 100% and outranks a payee with hundreds behind it.
+    private const int LowEvidence = 5;
+
+    private List<CategoryRule> rules = [];
+    private List<Category> categories = [];
+    private List<RuleSuggestion>? suggestions;
+
+    private string newPattern = "";
+    private CategoryRuleMatch newMatch = CategoryRuleMatch.Contains;
+    private int newCategoryId;
+
+    private string? error;
+    private string? notice;
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = await CategoryService.GetCategoriesAsync();
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        rules = await RuleService.GetRulesAsync();
+        suggestions = await RuleService.SuggestFromHistoryAsync();
+    }
+
+    private async Task AddRuleAsync()
+    {
+        error = notice = null;
+        if (newCategoryId == 0)
+        {
+            error = "Pick a category for the rule.";
+            return;
+        }
+
+        var (rule, failure) = await RuleService.CreateAsync(newPattern, newMatch, newCategoryId);
+        if (failure is not null)
+        {
+            error = failure;
+            return;
+        }
+
+        notice = $"Added a rule for \"{rule!.Pattern}\".";
+        newPattern = "";
+        await RefreshAsync();
+    }
+
+    private async Task AcceptAsync(RuleSuggestion suggestion)
+    {
+        error = notice = null;
+        var (_, failure) = await RuleService.CreateAsync(
+            suggestion.Payee, CategoryRuleMatch.Exact, suggestion.CategoryId);
+        if (failure is not null)
+        {
+            error = failure;
+            return;
+        }
+
+        notice = $"Added a rule for \"{suggestion.Payee}\". Apply it to existing transactions with the button above.";
+        await RefreshAsync();
+    }
+
+    private async Task ToggleAsync(CategoryRule rule, bool enabled)
+    {
+        error = notice = null;
+        error = await RuleService.UpdateAsync(rule.Id, rule.Pattern, rule.MatchType, rule.CategoryId, enabled);
+        await RefreshAsync();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        error = notice = null;
+        await RuleService.DeleteAsync(id);
+        await RefreshAsync();
+    }
+
+    private async Task ApplyAllAsync()
+    {
+        error = notice = null;
+        var result = await RuleService.ApplyAllAsync();
+        notice = result.Updated == 0
+            ? $"No matches. {result.Matched} uncategorized transaction(s) checked."
+            : $"Categorized {result.Updated} of {result.Matched} uncategorized transaction(s).";
+        await RefreshAsync();
+    }
+}

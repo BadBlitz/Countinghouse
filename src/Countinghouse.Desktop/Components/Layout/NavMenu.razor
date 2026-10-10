@@ -1,0 +1,34 @@
+<div class="nav-shell">
+    <a class="brand" href="">
+        <img src="logo.svg" alt="" width="30" height="30" />
+        <span class="wordmark">Countinghouse</span>
+    </a>
+
+    <nav aria-label="Main">
+        <div class="nav-group">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+            <NavLink class="nav-link" href="reports/net-worth">Net worth</NavLink>
+            <NavLink class="nav-link" href="reports/spending">Spending</NavLink>
+            <NavLink class="nav-link" href="transactions/uncategorized">Uncategorized</NavLink>
+        </div>
+
+        <div class="nav-group">
+            <h2 class="nav-heading">Accounts</h2>
+            <NavLink class="nav-link" href="accounts/new">Add account</NavLink>
+            <NavLink class="nav-link" href="settings/setup-accounts">Set up accounts</NavLink>
+        </div>
+
+        <div class="nav-group">
+            <h2 class="nav-heading">Settings</h2>
+            <NavLink class="nav-link" href="settings/simplefin">SimpleFIN</NavLink>
+            <NavLink class="nav-link" href="settings/categories">Categories</NavLink>
+            <NavLink class="nav-link" href="settings/rules">Categorization rules</NavLink>
+            <NavLink class="nav-link" href="settings/feed-expectations">Feed expectations</NavLink>
+            <NavLink class="nav-link" href="settings/backup">Backup</NavLink>
+        </div>
+    </nav>
+
+    <footer class="nav-footer">
+        <UpdateBanner />
+    </footer>
+</div>

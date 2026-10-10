@@ -1,0 +1,105 @@
+@page "/accounts/new"
+@page "/accounts/{Id:int}/edit"
+@inject AccountService AccountService
+@inject NavigationManager Nav
+
+<PageTitle>@(IsNew ? "Add Account" : "Edit Account") - Countinghouse</PageTitle>
+
+<h1>@(IsNew ? "Add account" : "Edit account")</h1>
+
+@if (account is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label class="form-label">Name</label>
+            <input class="form-control" @bind="account.Name" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Type</label>
+            <select class="form-select" @bind="account.AccountType">
+                <option value="@AccountType.Checking">Checking</option>
+                <option value="@AccountType.Savings">Savings</option>
+                <option value="@AccountType.CreditCard">Credit Card</option>
+                <option value="@AccountType.Mortgage">Mortgage</option>
+                <option value="@AccountType.Investment">Investment</option>
+                <option value="@AccountType.Manual">Other</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Opening Balance</label>
+            <input type="number" step="0.01" class="form-control" @bind="account.OpeningBalance" />
+            <div class="form-text">
+                Enter amounts you owe (credit cards, mortgage) as negative numbers so net worth adds up correctly.
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Opening Balance Date</label>
+            <input type="date" class="form-control" @bind="account.OpeningBalanceDate" />
+        </div>
+        @if (!IsNew)
+        {
+            <div class="form-check mb-3">
+                <input type="checkbox" class="form-check-input" id="isClosed" @bind="account.IsClosed" />
+                <label class="form-check-label" for="isClosed">Closed (hidden from dashboard and net worth)</label>
+            </div>
+        }
+
+        @if (error is not null)
+        {
+            <div class="alert alert-danger">@error</div>
+        }
+
+        <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
+        <a class="btn btn-outline-secondary" href="@(IsNew ? "/" : $"/accounts/{Id}")">Cancel</a>
+    </div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private Account? account;
+    private string? error;
+
+    private bool IsNew => Id is null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsNew)
+        {
+            account = new Account { OpeningBalanceDate = DateOnly.FromDateTime(DateTime.Today) };
+        }
+        else
+        {
+            account = await AccountService.GetAccountAsync(Id!.Value);
+            if (account is null)
+                error = "Account not found.";
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (account is null)
+            return;
+        if (string.IsNullOrWhiteSpace(account.Name))
+        {
+            error = "Name is required.";
+            return;
+        }
+
+        account.Name = account.Name.Trim();
+        if (IsNew)
+        {
+            var created = await AccountService.CreateAccountAsync(account);
+            Nav.NavigateTo($"/accounts/{created.Id}");
+        }
+        else
+        {
+            await AccountService.UpdateAccountAsync(account);
+            Nav.NavigateTo($"/accounts/{Id}");
+        }
+    }
+}

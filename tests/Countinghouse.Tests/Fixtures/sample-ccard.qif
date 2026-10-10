@@ -1,0 +1,30 @@
+!Type:Cat
+NGroceries
+E
+^
+NDining
+E
+^
+!Type:CCard
+D4/22'15
+U-64.13
+T-64.13
+CX
+PInvented Market
+MWeekly shop
+LGroceries
+^
+D8/ 7'26
+U-1,200.00
+T-1,200.00
+CX
+PInvented Restaurant
+LDining
+^
+D9/12'22
+U500.00
+T500.00
+CX
+PInvented Payment Received
+L[Sample Checking]
+^

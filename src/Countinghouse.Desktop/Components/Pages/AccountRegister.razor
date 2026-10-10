@@ -1,0 +1,356 @@
+@page "/accounts/{Id:int}"
+@inject AccountService AccountService
+@inject TransactionService TransactionService
+@inject CategoryService CategoryService
+@inject ReconciliationService ReconciliationService
+@inject BalanceCheckService BalanceCheckService
+@inject FeedHealthService FeedHealthService
+
+<PageTitle>@(account?.Name ?? "Account") - Countinghouse</PageTitle>
+
+@if (account is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="d-flex align-items-baseline gap-3 flex-wrap">
+        <h1 class="mb-0">@account.Name</h1>
+        <span class="text-muted">@(account.AccountType == AccountType.CreditCard ? "Credit card" : account.AccountType.ToString())</span>
+        <h4 class="mb-0 @(account.CurrentBalance < 0 ? "text-danger" : "")">@account.CurrentBalance.ToString("C2")</h4>
+        @if (account.BalanceAsOf is not null)
+        {
+            <span class="text-muted small">as of @account.BalanceAsOf.Value.ToString("M/d/yyyy h:mm tt")</span>
+        }
+    </div>
+
+    @if (balanceCheck is { Applies: true })
+    {
+        @if (balanceCheck.Status == BalanceCheckStatus.Balanced)
+        {
+            <div class="small text-success mt-1">
+                &#x2713; The register adds up to the synced balance exactly.
+                @if (balanceCheck.PendingCount > 0)
+                {
+                    <span class="text-muted">
+                        (@balanceCheck.PendingCount pending row(s) excluded — the bank hasn't posted them either.)
+                    </span>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-warning py-2 px-3 mt-2 mb-0 small">
+                <strong>The register is off by @Math.Abs(balanceCheck.Difference).ToString("C2").</strong>
+                The bank reports @balanceCheck.SyncedBalance.ToString("C2"); the register adds up to
+                @balanceCheck.RegisterBalance.ToString("C2").
+                @if (balanceCheck.Note is not null)
+                {
+                    <span>@balanceCheck.Note</span>
+                }
+                else
+                {
+                    <span>
+                        Most likely a transaction was never downloaded — reconcile against a statement to
+                        find which one.
+                    </span>
+                }
+                @if (balanceCheck.PendingCount > 0)
+                {
+                    <span class="text-muted">
+                        (@balanceCheck.PendingCount pending row(s) are excluded from both figures.)
+                    </span>
+                }
+            </div>
+        }
+    }
+
+    @* The feed's own health is a separate question from whether the register adds up: a frozen
+       feed shows up above as an ordinary difference, with nothing to say the figure it was
+       measured against stopped moving days ago. *@
+    @if (feedHealth is { Applies: true, Status: not FeedHealthStatus.Ok })
+    {
+        <div class="@(feedHealth.NeedsAttention ? "alert alert-warning" : "alert alert-light") py-2 px-3 mt-2 mb-0 small">
+            <FeedHealthBadge Health="feedHealth" />
+            <span class="ms-1">@feedHealth.Note</span>
+        </div>
+    }
+
+    <div class="my-2">
+        <a class="btn btn-sm btn-outline-secondary" href="accounts/@Id/edit">Edit account</a>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => showUpdateBalance = !showUpdateBalance">
+            Update balance
+        </button>
+        <a class="btn btn-sm btn-outline-secondary" href="accounts/@Id/import-history">Import history</a>
+        @if (account.SyncsTransactions)
+        {
+            <a class="btn btn-sm btn-outline-secondary" href="accounts/@Id/reconcile">
+                Reconcile@(openSession is not null ? " (in progress)" : "")
+            </a>
+        }
+    </div>
+
+    @if (showUpdateBalance)
+    {
+        <div class="card my-2" style="max-width: 30rem;">
+            <div class="card-body">
+                <h6 class="card-title">Update Current Balance</h6>
+                <p class="text-muted small mb-2">
+                    Posts a "Balance Adjustment" transaction for the difference — useful for the mortgage
+                    or fixing drift, not for regular activity.
+                </p>
+                <div class="row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label mb-0 small">New balance</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" @bind="updateBalanceAmount" />
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label mb-0 small">As of</label>
+                        <input type="date" class="form-control form-control-sm" @bind="updateBalanceDate" />
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-primary" @onclick="ApplyBalanceUpdateAsync">Apply</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <h5 class="mt-3">New Transaction</h5>
+    <div class="row g-2 align-items-end mb-3">
+        <div class="col-auto">
+            <label class="form-label mb-0 small">Date</label>
+            <input type="date" class="form-control form-control-sm" @bind="newTxn.PostedDate" />
+        </div>
+        <div class="col-auto">
+            <label class="form-label mb-0 small">Payee</label>
+            <input class="form-control form-control-sm" @bind="newTxn.Payee" />
+        </div>
+        <div class="col-auto">
+            <label class="form-label mb-0 small">Chk #</label>
+            <input class="form-control form-control-sm" style="width: 5rem;" @bind="newTxn.CheckNumber" />
+        </div>
+        <div class="col-auto">
+            <label class="form-label mb-0 small">Category</label>
+            <select class="form-select form-select-sm" @bind="newTxn.CategoryId">
+                <option value="">(none)</option>
+                @foreach (var category in categories)
+                {
+                    <option value="@category.Id">@category.FullName</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label mb-0 small">Memo</label>
+            <input class="form-control form-control-sm" @bind="newTxn.Memo" />
+        </div>
+        <div class="col-auto">
+            <label class="form-label mb-0 small">Amount (+in / −out)</label>
+            <input type="number" step="0.01" class="form-control form-control-sm" @bind="newTxn.Amount" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-sm btn-primary" @onclick="AddTransactionAsync">Add</button>
+        </div>
+    </div>
+    @if (error is not null)
+    {
+        <div class="alert alert-danger py-1">@error</div>
+    }
+
+    <table class="table table-sm table-hover align-middle register">
+        <thead>
+            <tr>
+                <th style="width: 7.5rem;">Date</th>
+                <th>Payee</th>
+                <th style="width: 4.5rem;">Chk #</th>
+                <th>Category</th>
+                <th>Memo</th>
+                <th style="width: 3rem;" title="Cleared status">Clr</th>
+                <th class="text-end" style="width: 7rem;">Amount</th>
+                <th class="text-end" style="width: 7.5rem;">Balance</th>
+                <th style="width: 8rem;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in Enumerable.Reverse(register))
+            {
+                var txn = row.Transaction;
+                @if (editModel is not null && editModel.Id == txn.Id)
+                {
+                    <tr>
+                        <td><input type="date" class="form-control form-control-sm" @bind="editModel.PostedDate" /></td>
+                        <td><input class="form-control form-control-sm" @bind="editModel.Payee" /></td>
+                        <td><input class="form-control form-control-sm" @bind="editModel.CheckNumber" /></td>
+                        <td>
+                            <select class="form-select form-select-sm" @bind="editModel.CategoryId">
+                                <option value="">(none)</option>
+                                @foreach (var category in categories)
+                                {
+                                    <option value="@category.Id">@category.FullName</option>
+                                }
+                            </select>
+                        </td>
+                        <td><input class="form-control form-control-sm" @bind="editModel.Memo" /></td>
+                        <td>
+                            <select class="form-select form-select-sm" @bind="editModel.ClearedStatus">
+                                <option value="@ClearedStatus.Uncleared">&nbsp;</option>
+                                <option value="@ClearedStatus.Cleared">c</option>
+                                <option value="@ClearedStatus.Reconciled">R</option>
+                            </select>
+                        </td>
+                        <td><input type="number" step="0.01" class="form-control form-control-sm text-end" @bind="editModel.Amount" /></td>
+                        <td></td>
+                        <td class="text-nowrap">
+                            <button class="btn btn-sm btn-primary" @onclick="SaveEditAsync">Save</button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => editModel = null">Cancel</button>
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td>@txn.PostedDate.ToString("M/d/yyyy")</td>
+                        <td>@txn.Payee</td>
+                        <td>@txn.CheckNumber</td>
+                        <td>@txn.Category?.FullName</td>
+                        <td class="text-muted">@txn.Memo</td>
+                        <td>@ClearedLabel(txn.ClearedStatus)</td>
+                        <td class="text-end @(txn.Amount < 0 ? "text-danger" : "")">@txn.Amount.ToString("C2")</td>
+                        <td class="text-end">@row.RunningBalance.ToString("C2")</td>
+                        <td class="text-nowrap">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => BeginEdit(txn)">Edit</button>
+                            @if (deleteConfirmId == txn.Id)
+                            {
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(txn.Id)">Confirm</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => deleteConfirmId = txn.Id">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+            <tr class="table-light">
+                <td>@(account.OpeningBalanceDate?.ToString("M/d/yyyy"))</td>
+                <td colspan="6">Opening Balance</td>
+                <td class="text-end">@account.OpeningBalance.ToString("C2")</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Account? account;
+    private List<RegisterRow> register = [];
+    private List<Category> categories = [];
+    private Transaction newTxn = new();
+    private Transaction? editModel;
+    private int? deleteConfirmId;
+    private ReconciliationSession? openSession;
+    private AccountBalanceCheck? balanceCheck;
+    private AccountFeedHealth? feedHealth;
+    private bool showUpdateBalance;
+    private decimal updateBalanceAmount;
+    private DateOnly updateBalanceDate = DateOnly.FromDateTime(DateTime.Today);
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        categories = await CategoryService.GetCategoriesAsync();
+        ResetNewTransaction();
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        account = await AccountService.GetAccountAsync(Id);
+        if (account is null)
+            return;
+        register = await TransactionService.GetRegisterAsync(Id);
+        openSession = account.SyncsTransactions ? await ReconciliationService.GetOpenSessionAsync(Id) : null;
+        // Refreshed alongside the register so an edit that fixes the difference clears the warning.
+        balanceCheck = await BalanceCheckService.CheckAccountAsync(Id);
+        feedHealth = await FeedHealthService.CheckAccountAsync(Id);
+        updateBalanceAmount = account.CurrentBalance;
+        editModel = null;
+        deleteConfirmId = null;
+    }
+
+    private void ResetNewTransaction() =>
+        newTxn = new Transaction
+        {
+            AccountId = Id,
+            PostedDate = DateOnly.FromDateTime(DateTime.Today),
+            Source = TransactionSource.Manual,
+        };
+
+    private async Task AddTransactionAsync()
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(newTxn.Payee))
+        {
+            error = "Payee is required.";
+            return;
+        }
+        newTxn.Payee = newTxn.Payee.Trim();
+        await TransactionService.AddTransactionAsync(newTxn);
+        ResetNewTransaction();
+        await RefreshAsync();
+    }
+
+    private void BeginEdit(Transaction txn)
+    {
+        deleteConfirmId = null;
+        editModel = new Transaction
+        {
+            Id = txn.Id,
+            AccountId = txn.AccountId,
+            Amount = txn.Amount,
+            PostedDate = txn.PostedDate,
+            Payee = txn.Payee,
+            Memo = txn.Memo,
+            CheckNumber = txn.CheckNumber,
+            CategoryId = txn.CategoryId,
+            ClearedStatus = txn.ClearedStatus,
+        };
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (editModel is null)
+            return;
+        error = null;
+        if (string.IsNullOrWhiteSpace(editModel.Payee))
+        {
+            error = "Payee is required.";
+            return;
+        }
+        editModel.Payee = editModel.Payee.Trim();
+        await TransactionService.UpdateTransactionAsync(editModel);
+        await RefreshAsync();
+    }
+
+    private async Task DeleteAsync(int txnId)
+    {
+        await TransactionService.DeleteTransactionAsync(txnId);
+        await RefreshAsync();
+    }
+
+    private async Task ApplyBalanceUpdateAsync()
+    {
+        await AccountService.UpdateBalanceAsync(Id, updateBalanceAmount, updateBalanceDate);
+        showUpdateBalance = false;
+        await RefreshAsync();
+    }
+
+    private static string ClearedLabel(ClearedStatus status) => status switch
+    {
+        ClearedStatus.Cleared => "c",
+        ClearedStatus.Reconciled => "R",
+        _ => "",
+    };
+}

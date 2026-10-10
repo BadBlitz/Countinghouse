@@ -1,0 +1,52 @@
+// Optional account bootstrap list for /settings/setup-accounts.
+//
+// Copy to %LOCALAPPDATA%\Countinghouse\accounts.json and edit. It stays outside the repo on purpose:
+// it names your real accounts and institutions. Without it the setup page simply has nothing to
+// offer, and accounts get created through the ordinary account form instead.
+//
+// accountType: Checking | Savings | CreditCard | Mortgage | Investment | Manual
+//
+// importsHistory: true for accounts whose past transactions you will load from a QIF export.
+//   Those accounts MUST open at 0.00, because Quicken exports its own opening-balance row as the
+//   first transaction and the balance is opening + sum(transactions) — entering a real balance
+//   double-counts the entire history, silently. The setup page enforces this by offering no
+//   balance field on these rows at all.
+//
+// openingBalanceDate: the day before the account's earliest imported transaction. Omit it for
+//   snapshot accounts and today's date is used.
+//
+// Snapshot accounts (importsHistory false) are the ones whose history can't be imported —
+// investment accounts, where transactions are share movements rather than money, and a mortgage.
+// You supply their current balance on the setup page.
+[
+  {
+    "name": "Example Checking",
+    "accountType": "Checking",
+    "openingBalanceDate": "2015-12-31",
+    "importsHistory": true,
+    "notes": "History from Checking.QIF"
+  },
+  {
+    "name": "Example Credit Card",
+    "accountType": "CreditCard",
+    "openingBalanceDate": "2017-06-30",
+    "importsHistory": true,
+    "notes": "History from CreditCard.QIF"
+  },
+  {
+    "name": "Example Savings",
+    "accountType": "Savings",
+    "openingBalanceDate": "2020-02-29",
+    "importsHistory": true
+  },
+  {
+    "name": "Example Brokerage",
+    "accountType": "Investment",
+    "notes": "Snapshot — investment history can't produce a correct balance"
+  },
+  {
+    "name": "Example Mortgage",
+    "accountType": "Mortgage",
+    "notes": "Snapshot by design — enter what you owe as a negative number"
+  }
+]

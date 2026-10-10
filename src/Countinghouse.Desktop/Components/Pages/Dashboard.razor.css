@@ -1,0 +1,83 @@
+.net-worth {
+    margin-bottom: 2rem;
+}
+
+.net-worth-label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin: 0 0 0.15rem;
+}
+
+/* The accountant's double rule under a final total: the one flourish on this page. */
+.net-worth-figure {
+    display: inline-block;
+    font-size: 2.75rem;
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+    padding-bottom: 0.2rem;
+    border-bottom: 4px double var(--ink);
+}
+
+    .net-worth-figure.negative {
+        color: var(--red);
+        border-bottom-color: var(--red);
+    }
+
+.net-worth-note {
+    color: var(--ink-soft);
+    margin: 0.6rem 0 0;
+    font-size: 0.875rem;
+}
+
+.ledger {
+    margin-bottom: 2.5rem;
+}
+
+    .ledger thead th:last-child {
+        width: 11rem;
+    }
+
+    .ledger .group-row > * {
+        padding-top: 1.1rem;
+        font-weight: 600;
+        border-bottom-color: var(--rule-strong);
+    }
+
+    .ledger tbody:first-of-type .group-row > * {
+        padding-top: 0.6rem;
+    }
+
+    .ledger .account-name {
+        padding-left: 1.25rem;
+    }
+
+    .ledger .closed td {
+        color: var(--ink-soft);
+    }
+
+.money {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+    .money.negative {
+        color: var(--red);
+    }
+
+.in-sync {
+    color: var(--green);
+    font-size: 0.875rem;
+}
+
+.section-title {
+    font-size: 1.0625rem;
+    margin: 0 0 0.5rem;
+}
+
+.empty {
+    padding: 2rem 0;
+}
