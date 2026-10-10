@@ -58,6 +58,13 @@
     <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- GPL-3.0 asks that the licence travel with every copy, and the licences of the bundled
+       components ask the same of their notices, so both ship beside the executable. -->
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The Razor SDK writes Countinghouse.styles.css into obj and expects a web host to serve it from
        there. index.html asks for it at the site root, so it has to land in wwwroot beside the
        other assets. Explicit targets rather than Content items: the file does not exist at
