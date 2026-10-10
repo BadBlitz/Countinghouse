@@ -100,6 +100,8 @@ A few invariants are load-bearing enough to call out here:
 New behavior should come with tests. Schema changes need a real EF Core migration, never
 `EnsureCreated()`.
 
+Found a security problem? Report it privately; see **[`SECURITY.md`](SECURITY.md)**.
+
 ## License
 
 [GNU GPL v3.0](LICENSE).
