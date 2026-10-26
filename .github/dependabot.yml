@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # The release workflow ships straight to every installed copy, so its actions are pinned to
+  # commit SHAs rather than movable tags. Dependabot keeps those pins (and their version
+  # comments) current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # NuGet packages, including the monthly .NET servicing releases. PRs target develop, since
+  # main only takes merges from develop.
+  - package-ecosystem: "nuget"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      dotnet-servicing:
+        patterns:
+          - "Microsoft.*"
