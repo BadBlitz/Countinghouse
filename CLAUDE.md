@@ -417,6 +417,10 @@ applies the update at next launch.
 - A private fork needs a read-only GitHub token in `github-token.txt` in the data directory for
   update checks. A public repo needs none.
 - Releases are unsigned, so SmartScreen warns on the first `Setup.exe` run.
+- `LICENSE` and `THIRD-PARTY-NOTICES.md` ship beside the executable. **Adding or removing a
+  package that ends up in the publish output means updating the notices file**: its licence must
+  be GPL-3.0 compatible, and its copyright line and licence text must be listed. Test-only and
+  build-only packages don't ship and aren't listed.
 
 ## Fixed identifiers
 
