@@ -41,7 +41,7 @@
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
     <!-- Installer and self-update from GitHub Releases. Keep in step with vpk in dotnet-tools.json. -->
-    <PackageReference Include="Velopack" Version="1.2.158" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <!-- App.xaml as a Page rather than the ApplicationDefinition, so WPF generates no Main and
