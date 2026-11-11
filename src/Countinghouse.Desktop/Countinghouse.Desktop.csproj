@@ -36,10 +36,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.101" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.130" />
     <!-- Not pulled in automatically here the way a Web SDK project's framework reference would. -->
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.12" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="11.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="11.0.0" />
     <!-- Installer and self-update from GitHub Releases. Keep in step with vpk in dotnet-tools.json. -->
     <PackageReference Include="Velopack" Version="1.2.158" />
   </ItemGroup>
